@@ -34,10 +34,11 @@
 //! }
 //! ```
 
+// extern crate num;
 
 use std::mem;       // yup, used pretty much everywhere.
 use std::io::Write; // for bytes.write_all; push_all is unstable and extend is slow.
-
+// use std::traits::PrimInt;
 
 /// Encodes a vector of typed data into a binary buffer.
 ///
@@ -66,10 +67,9 @@ use std::io::Write; // for bytes.write_all; push_all is unstable and extend is s
 pub fn encode<T: Abomonation>(typed: &Vec<T>, bytes: &mut Vec<u8>) {
     let slice = unsafe { std::slice::from_raw_parts(mem::transmute(typed), mem::size_of::<Vec<T>>()) };
     bytes.write_all(slice).unwrap();    // write to a Vec<u8> is claimed to never fail.
-    unsafe { typed.entomb(bytes); }
-
     let result: &mut Vec<T> = unsafe { mem::transmute(bytes.get_unchecked_mut(0)) };
-    unsafe { result.tidyup(); }
+    unsafe { result.embalm(); }
+    unsafe { typed.entomb(bytes); }
 }
 
 /// Decodes a binary buffer into a reference to a typed vector.
@@ -122,7 +122,7 @@ pub trait Abomonation {
     /// Perform any final edits before committing `&mut self`.
     ///
     /// Most commonly this overwrites pointers whose values should not be recorded.
-    unsafe fn tidyup(&mut self) { }
+    unsafe fn embalm(&mut self) { }
 
     /// Recover any information for `&mut self` not evident from its binary representation.
     ///
@@ -131,19 +131,23 @@ pub trait Abomonation {
 }
 
 impl Abomonation for u8 { }
-impl Abomonation for u64 { }
+impl Abomonation for u64 {
+    // TODO : if these were optimized out, hooray! they aren't.
+    // unsafe fn embalm(&mut self) { *self = (*self).to_le(); }
+    // unsafe fn exhume(&mut self, bytes: &mut &[u8]) -> Result<(), ()> { *self = u64::from_le(*self); Ok(()) }
+}
 impl<T1: Abomonation, T2: Abomonation> Abomonation for (T1, T2) {
+    unsafe fn embalm(&mut self) { self.0.embalm(); self.1.embalm(); }
     unsafe fn entomb(&self, bytes: &mut Vec<u8>) { self.0.entomb(bytes); self.1.entomb(bytes); }
-    unsafe fn tidyup(&mut self) { self.0.tidyup(); self.1.tidyup(); }
     unsafe fn exhume(&mut self, bytes: &mut &[u8]) -> Result<(), ()> { try!(self.0.exhume(bytes)); try!(self.1.exhume(bytes)); Ok(()) }
 }
 
 impl Abomonation for String {
+    unsafe fn embalm(&mut self) {
+        std::ptr::write(self, String::from_raw_parts(0 as *mut u8, self.len(), self.len()));
+    }
     unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
         bytes.write_all(self.as_bytes()).unwrap();
-    }
-    unsafe fn tidyup(&mut self) {
-        std::ptr::write(self, String::from_raw_parts(0 as *mut u8, self.len(), self.len()));
     }
     unsafe fn exhume(&mut self, bytes: &mut &[u8]) -> Result<(), ()> {
         if self.len() > bytes.len() { Err(()) }
@@ -157,14 +161,14 @@ impl Abomonation for String {
 }
 
 impl<T: Abomonation> Abomonation for Vec<T> {
+    unsafe fn embalm(&mut self) {
+        std::ptr::write(self, Vec::from_raw_parts(0 as *mut T, self.len(), self.len()));
+    }
     unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
         let position = bytes.len();
         bytes.write_all(typed_to_bytes(&self[..])).unwrap();
-        for element in bytes_to_typed::<T>(&mut bytes[position..]) { element.tidyup(); }
+        for element in bytes_to_typed::<T>(&mut bytes[position..]) { element.embalm(); }
         for element in self.iter() { element.entomb(bytes); }
-    }
-    unsafe fn tidyup(&mut self) {
-        std::ptr::write(self, Vec::from_raw_parts(0 as *mut T, self.len(), self.len()));
     }
     unsafe fn exhume(&mut self, bytes: &mut &[u8]) -> Result<(),()> {
 
