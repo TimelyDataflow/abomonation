@@ -18,8 +18,9 @@ let mut bytes = Vec::new();
 encode(&vector, &mut bytes);
 
 // decode a &Vec<(u64, String)> from binary data
-let result = decode::<(u64, String)>(&mut bytes).unwrap();
-assert!(result == &vector);
+if let Ok(result) = decode::<(u64, String)>(&mut bytes) {
+    assert!(result == &vector);
+}
 ```
 
 When you use Abomonation things may go really fast. That is because it does so little work, and mostly just copies large hunks of memory. Typing
