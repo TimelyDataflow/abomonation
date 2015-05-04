@@ -29,8 +29,9 @@
 //! encode(&vector, &mut bytes);
 //!
 //! // decode a &Vec<(u64, String)> from binary data
-//! let result = decode::<(u64, String)>(&mut bytes);
-//! assert!(result == &vector);
+//! if let Ok(result) = decode::<(u64, String)>(&mut bytes) {
+//!     assert!(result == &vector);
+//! }
 //! ```
 
 
@@ -57,8 +58,9 @@ use std::io::Write; // for bytes.write_all; push_all is unstable and extend is s
 /// encode(&vector, &mut bytes);
 ///
 /// // decode a &Vec<(u64, String)> from binary data
-/// let result = decode::<(u64, String)>(&mut bytes);
-/// assert!(result == &vector);
+/// if let Ok(result) = decode::<(u64, String)>(&mut bytes) {
+///     assert!(result == &vector);
+/// }
 /// ```
 ///
 pub fn encode<T: Abomonation>(typed: &Vec<T>, bytes: &mut Vec<u8>) {
@@ -88,8 +90,9 @@ pub fn encode<T: Abomonation>(typed: &Vec<T>, bytes: &mut Vec<u8>) {
 /// encode(&vector, &mut bytes);
 ///
 /// // decode a &Vec<(u64, String)> from binary data
-/// let result = decode::<(u64, String)>(&mut bytes);
-/// assert!(result == &vector);
+/// if let Ok(result) = decode::<(u64, String)>(&mut bytes) {
+///     assert!(result == &vector);
+/// }
 /// ```
 pub fn decode<T: Abomonation>(bytes: &mut [u8]) -> Result<&Vec<T>,()> {
     let (split1, split2) = bytes.split_at_mut(mem::size_of::<Vec<T>>());
