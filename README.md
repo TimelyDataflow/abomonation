@@ -1,7 +1,7 @@
 # Abomonation
 A mortifying serialization library for Rust
 
-Abomonation (spelling intentional) is a serialization library for Rust based on the very simple idea that if someone presents data for serialization it will copy those exact bits, and then follow any pointers and copy those bits. When deserializing it recovers the exact bits, and then corrects pointers to aim at the serialized forms of the chased data.
+Abomonation (spelling intentional) is a serialization library for Rust based on the very simple idea that if someone presents data for serialization it will copy those exact bits, and then follow any pointers and copy those bits, and so on. When deserializing it recovers the exact bits, and then corrects pointers to aim at the serialized forms of the chased data.
 
 Abomonation should not be used on any data you care strongly about, or from any computer you value the data on. It really isn't that bad, but it isn't clear how bad it actually is just yet.
 
@@ -38,4 +38,4 @@ They also repeatedly decode the same data, giving numbers like:
     test bench_dec_string  ... bench:     11289 ns/iter (+/- 2432) = 3086 MB/s
     test bench_dec_vec_u_s ... bench:     12557 ns/iter (+/- 2183) = 3488 MB/s
 
-Be warned that these numbers are not *goodput*, but rather the total number of bytes moved, which is equal to the in-memory representation of the data. On a 64bit system, a `String` requires 24 bytes plus one byte per character, which can be a lot of overhead for small strings. 
+Be warned that these numbers are not *goodput*, but rather the total number of bytes moved, which is equal to the in-memory representation of the data. On a 64bit system, a `String` requires 24 bytes plus one byte per character, which can be a lot of overhead for small strings.
