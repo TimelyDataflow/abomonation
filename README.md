@@ -18,7 +18,7 @@ let mut bytes = Vec::new();
 encode(&vector, &mut bytes);
 
 // decode a &Vec<(u64, String)> from binary data
-let result = decode::<(u64, String)>(&mut bytes);
+let result = decode::<(u64, String)>(&mut bytes).unwrap();
 assert!(result == &vector);
 ```
 
