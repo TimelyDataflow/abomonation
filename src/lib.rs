@@ -66,7 +66,7 @@ use std::io::Write; // for bytes.write_all; push_all is unstable and extend is s
 ///
 pub fn encode<T: Abomonation>(typed: &Vec<T>, bytes: &mut Vec<u8>) {
     let slice = unsafe { std::slice::from_raw_parts(mem::transmute(typed), mem::size_of::<Vec<T>>()) };
-    bytes.write_all(slice).unwrap();    // write to a Vec<u8> is claimed to never fail.
+    bytes.write_all(slice).unwrap();    // a write to a Vec<u8> is claimed to never fail.
     let result: &mut Vec<T> = unsafe { mem::transmute(bytes.get_unchecked_mut(0)) };
     unsafe { result.embalm(); }
     unsafe { typed.entomb(bytes); }
@@ -94,7 +94,7 @@ pub fn encode<T: Abomonation>(typed: &Vec<T>, bytes: &mut Vec<u8>) {
 ///     assert!(result == &vector);
 /// }
 /// ```
-pub fn decode<T: Abomonation>(bytes: &mut [u8]) -> Result<&Vec<T>,&mut [u8]> {
+pub fn decode<T: Abomonation>(bytes: &mut [u8]) -> Result<&Vec<T>, &mut [u8]> {
     let (split1, split2) = bytes.split_at_mut(mem::size_of::<Vec<T>>());
 
     let result: &mut Vec<T> = unsafe { mem::transmute(split1.get_unchecked_mut(0)) };
@@ -131,15 +131,30 @@ pub trait Abomonation {
 }
 
 impl Abomonation for u8 { }
+impl Abomonation for u16 { }
+impl Abomonation for u32 { }
 impl Abomonation for u64 {
     // TODO : if these were optimized out, hooray! they aren't.
     // unsafe fn embalm(&mut self) { *self = (*self).to_le(); }
     // unsafe fn exhume(&mut self, bytes: &mut &[u8]) -> Result<(), ()> { *self = u64::from_le(*self); Ok(()) }
 }
+
+impl Abomonation for i8 { }
+impl Abomonation for i16 { }
+impl Abomonation for i32 { }
+impl Abomonation for i64 { }
+
+impl Abomonation for f32 { }
+impl Abomonation for f64 { }
+
+impl Abomonation for bool { }
+
+impl<T: Abomonation> Abomonation for Option<T> { }
+
 impl<T1: Abomonation, T2: Abomonation> Abomonation for (T1, T2) {
     unsafe fn embalm(&mut self) { self.0.embalm(); self.1.embalm(); }
     unsafe fn entomb(&self, bytes: &mut Vec<u8>) { self.0.entomb(bytes); self.1.entomb(bytes); }
-    unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Result<&'b mut [u8],&'b mut [u8]> {
+    unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Result<&'b mut [u8], &'b mut [u8]> {
         let tmp = bytes;
         bytes = try!(self.0.exhume(tmp));
         let tmp = bytes;
@@ -155,7 +170,7 @@ impl Abomonation for String {
     unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
         bytes.write_all(self.as_bytes()).unwrap();
     }
-    unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Result<&'b mut [u8],&'b mut [u8]> {
+    unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Result<&'b mut [u8], &'b mut [u8]> {
         if self.len() > bytes.len() { Err(bytes) }
         else {
             let (mine, rest) = bytes.split_at_mut(self.len());
@@ -175,7 +190,7 @@ impl<T: Abomonation> Abomonation for Vec<T> {
         for element in bytes_to_typed::<T>(&mut bytes[position..]) { element.embalm(); }
         for element in self.iter() { element.entomb(bytes); }
     }
-    unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Result<&'b mut [u8],&'b mut [u8]> {
+    unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Result<&'b mut [u8], &'b mut [u8]> {
 
         // extract memory from bytes to back our vector
         let binary_len = self.len() * mem::size_of::<T>();

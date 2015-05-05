@@ -9,14 +9,15 @@ use test::Bencher;
 
 use std::io::Read;
 
-#[bench] fn bench_enc_u64(bencher: &mut Bencher) { _bench_enc(bencher, &vec![0u64; 1024]); }
-#[bench] fn bench_dec_u64(bencher: &mut Bencher) { _bench_dec(bencher, &vec![0u64; 1024]); }
+#[bench] fn enc_u64(bencher: &mut Bencher) { _bench_enc(bencher, &vec![0u64; 1024]); }
+#[bench] fn dec_u64(bencher: &mut Bencher) { _bench_dec(bencher, &vec![0u64; 1024]); }
 
-#[bench] fn bench_enc_string(bencher: &mut Bencher) { _bench_enc(bencher, &vec![format!("grawwwwrr!"); 1024]); }
-#[bench] fn bench_dec_string(bencher: &mut Bencher) { _bench_dec(bencher, &vec![format!("hey there!"); 1024]); }
+#[bench] fn enc_string(bencher: &mut Bencher) { _bench_enc(bencher, &vec![format!("grawwwwrr!"); 1024]); }
+#[bench] fn dec_string(bencher: &mut Bencher) { _bench_dec(bencher, &vec![format!("grawwwwrr!"); 1024]); }
 
-#[bench] fn bench_enc_vec_u_s(bencher: &mut Bencher) { _bench_enc(bencher, &vec![vec![(0u64, format!("hey there!")); 32]; 32]); }
-#[bench] fn bench_dec_vec_u_s(bencher: &mut Bencher) { _bench_dec(bencher, &vec![vec![(0u64, format!("hey there!")); 32]; 32]); }
+#[bench] fn enc_vec_u_s(bencher: &mut Bencher) { _bench_enc(bencher, &vec![vec![(0u64, format!("grawwwwrr!")); 32]; 32]); }
+#[bench] fn dec_vec_u_s(bencher: &mut Bencher) { _bench_dec(bencher, &vec![vec![(0u64, format!("grawwwwrr!")); 32]; 32]); }
+
 
 fn _bench_enc<T: Abomonation>(bencher: &mut Bencher, vector: &Vec<T>) {
 
