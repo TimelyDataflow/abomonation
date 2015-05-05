@@ -94,11 +94,11 @@ pub fn encode<T: Abomonation>(typed: &Vec<T>, bytes: &mut Vec<u8>) {
 ///     assert!(result == &vector);
 /// }
 /// ```
-pub fn decode<T: Abomonation>(bytes: &mut [u8]) -> Result<&Vec<T>,()> {
+pub fn decode<T: Abomonation>(bytes: &mut [u8]) -> Result<&Vec<T>,&mut [u8]> {
     let (split1, split2) = bytes.split_at_mut(mem::size_of::<Vec<T>>());
 
     let result: &mut Vec<T> = unsafe { mem::transmute(split1.get_unchecked_mut(0)) };
-    unsafe { try!(result.exhume(&mut &*split2)); }
+    unsafe { try!(result.exhume(split2)); }
     Ok(result)
 }
 
@@ -127,7 +127,7 @@ pub trait Abomonation {
     /// Recover any information for `&mut self` not evident from its binary representation.
     ///
     /// Most commonly this populates pointers with valid references into `_bytes`.
-    unsafe fn exhume(&mut self, _bytes: &mut &[u8]) -> Result<(),()> { Ok(()) }
+    unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Result<&'b mut [u8], &'b mut [u8]> { Ok(bytes) }
 }
 
 impl Abomonation for u8 { }
@@ -139,7 +139,13 @@ impl Abomonation for u64 {
 impl<T1: Abomonation, T2: Abomonation> Abomonation for (T1, T2) {
     unsafe fn embalm(&mut self) { self.0.embalm(); self.1.embalm(); }
     unsafe fn entomb(&self, bytes: &mut Vec<u8>) { self.0.entomb(bytes); self.1.entomb(bytes); }
-    unsafe fn exhume(&mut self, bytes: &mut &[u8]) -> Result<(), ()> { try!(self.0.exhume(bytes)); try!(self.1.exhume(bytes)); Ok(()) }
+    unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Result<&'b mut [u8],&'b mut [u8]> {
+        let tmp = bytes;
+        bytes = try!(self.0.exhume(tmp));
+        let tmp = bytes;
+        bytes = try!(self.1.exhume(tmp));
+        Ok(bytes)
+    }
 }
 
 impl Abomonation for String {
@@ -149,13 +155,12 @@ impl Abomonation for String {
     unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
         bytes.write_all(self.as_bytes()).unwrap();
     }
-    unsafe fn exhume(&mut self, bytes: &mut &[u8]) -> Result<(), ()> {
-        if self.len() > bytes.len() { Err(()) }
+    unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Result<&'b mut [u8],&'b mut [u8]> {
+        if self.len() > bytes.len() { Err(bytes) }
         else {
-            let mine = &bytes[..self.len()];
-            *bytes = &bytes[self.len()..];
+            let (mine, rest) = bytes.split_at_mut(self.len());
             std::ptr::write(self, String::from_raw_parts(mem::transmute(mine.as_ptr()), self.len(), self.len()));
-            Ok(())
+            Ok(rest)
         }
     }
 }
@@ -170,17 +175,16 @@ impl<T: Abomonation> Abomonation for Vec<T> {
         for element in bytes_to_typed::<T>(&mut bytes[position..]) { element.embalm(); }
         for element in self.iter() { element.entomb(bytes); }
     }
-    unsafe fn exhume(&mut self, bytes: &mut &[u8]) -> Result<(),()> {
+    unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Result<&'b mut [u8],&'b mut [u8]> {
 
         // extract memory from bytes to back our vector
         let binary_len = self.len() * mem::size_of::<T>();
-        if binary_len > bytes.len() { Err(()) }
+        if binary_len > bytes.len() { Err(bytes) }
         else {
-            let back = &bytes[..binary_len];
-            *bytes = &bytes[binary_len..];
+            let (mine, mut rest) = bytes.split_at_mut(binary_len);
 
             // transmute back to &mut [u8], and then transmute to &mut [T].
-            let slice: &mut [T] = bytes_to_typed(mem::transmute(back));
+            let slice: &mut [T] = bytes_to_typed(mem::transmute(mine));
 
             // build a new vector using this memory
             let vector = Vec::from_raw_parts(slice.as_mut_ptr(), self.len(), self.len());
@@ -189,8 +193,11 @@ impl<T: Abomonation> Abomonation for Vec<T> {
             std::ptr::write(self, vector);
 
             // pretend everything is normal; call exhume on each element
-            for element in self.iter_mut() { try!(element.exhume(bytes)); }
-            Ok(())
+            for element in self.iter_mut() {
+                let temp = rest;
+                rest = try!(element.exhume(temp));
+            }
+            Ok(rest)
         }
     }
 }
