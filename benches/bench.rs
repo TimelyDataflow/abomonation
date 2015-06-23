@@ -18,7 +18,6 @@ use std::io::Read;
 #[bench] fn enc_vec_u_s(bencher: &mut Bencher) { _bench_enc(bencher, &vec![vec![(0u64, format!("grawwwwrr!")); 32]; 32]); }
 #[bench] fn dec_vec_u_s(bencher: &mut Bencher) { _bench_dec(bencher, &vec![vec![(0u64, format!("grawwwwrr!")); 32]; 32]); }
 
-
 fn _bench_enc<T: Abomonation>(bencher: &mut Bencher, vector: &Vec<T>) {
 
     let mut bytes = Vec::new();
@@ -27,15 +26,14 @@ fn _bench_enc<T: Abomonation>(bencher: &mut Bencher, vector: &Vec<T>) {
     bencher.bytes = bytes.len() as u64;
     bencher.iter(|| {
         bytes.clear();
-        encode(vector, &mut bytes);
+        encode(&vector[..], &mut bytes);
     });
 }
-
 
 fn _bench_dec<T: Abomonation+Eq>(bencher: &mut Bencher, vector: &Vec<T>) {
 
     let mut bytes = Vec::new();
-    encode(vector, &mut bytes);
+    encode(&vector[..], &mut bytes);
 
     bencher.bytes = bytes.len() as u64;
     bencher.iter(|| {
