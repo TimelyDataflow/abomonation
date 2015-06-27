@@ -2,10 +2,11 @@
 //!
 //! Abomonation takes vectors of types and simply writes their contents as binary.
 //! It then gives each typed element of the vector the opportunity to serialize more data, which is
-//! useful for types with owned memory such as String and Vec.
+//! useful for types with owned memory such as `String` and `Vec`.
 //! The result is effectively a copy of reachable memory, where pointers are zero-ed out and vector
-//! capacities are set to the vector length. The intended locations of pointers can be recovered on
-//! deserialization by consuming binary data in the same way it was produced.
+//! capacities are set to the vector length.
+//! Deserialization results in a shared slice, where internal pointers reference locations in the
+//! binary data itself.
 //!
 //! Abomonation does several unsafe things, and should ideally be used only through the methods
 //! `encode` and `decode` on types implementing the `Abomonation` trait.
@@ -14,7 +15,8 @@
 //!
 //! **Very important**: Abomonation reproduces the memory as laid out by the serializer, which can
 //! reveal architectural variations. Data encoded on a 32bit big-endian machine will not decode
-//! properly on a 64bit little-endian machine. Ideally it won't eat your laundry, but rather panic.
+//! properly on a 64bit little-endian machine. Moreover, it could result in undefined behavior if
+//! the deserialization results in invalid typed data. Please do not do this.
 //!
 //!
 //! #Examples
@@ -25,11 +27,11 @@
 //! let vector = (0..256u64).map(|i| (i, format!("{}", i)))
 //!                         .collect::<Vec<_>>();
 //!
-//! // encode vector into a Vec<u8>
+//! // encode a &[(u64, String)] into a Vec<u8>
 //! let mut bytes = Vec::new();
-//! encode(&vector[..], &mut bytes);
+//! encode(&vector, &mut bytes);
 //!
-//! // decode a &Vec<(u64, String)> from binary data
+//! // decode a &[(u64, String)] from &mut [u8] binary data
 //! if let Ok(result) = decode::<(u64, String)>(&mut bytes) {
 //!     assert!(result == &vector[..]);
 //! }
@@ -56,11 +58,11 @@ use std::io::Write; // for bytes.write_all; push_all is unstable and extend is s
 /// let vector = (0..256u64).map(|i| (i, format!("{}", i)))
 ///                         .collect::<Vec<_>>();
 ///
-/// // encode vector into a Vec<u8>
+/// // encode a &[(u64, String)] into a Vec<u8>
 /// let mut bytes = Vec::new();
-/// encode(&vector[..], &mut bytes);
+/// encode(&vector, &mut bytes);
 ///
-/// // decode a &Vec<(u64, String)> from binary data
+/// // decode a &[(u64, String)] from &mut [u8] binary data
 /// if let Ok(result) = decode::<(u64, String)>(&mut bytes) {
 ///     assert!(result == &vector[..]);
 /// }
@@ -69,7 +71,7 @@ use std::io::Write; // for bytes.write_all; push_all is unstable and extend is s
 pub fn encode<T: Abomonation>(typed: &[T], bytes: &mut Vec<u8>) {
     unsafe {
         let slice = std::slice::from_raw_parts(mem::transmute(&typed), mem::size_of::<&[T]>());
-        bytes.write_all(slice).unwrap();    // a write to a Vec<u8> is claimed to never fail.
+        bytes.write_all(slice).unwrap();    // Rust claims a write to a Vec<u8> will never fail.
         let result: &mut Vec<T> = mem::transmute(bytes.get_unchecked_mut(0));
         result.embalm();
         typed.entomb(bytes);
@@ -78,7 +80,7 @@ pub fn encode<T: Abomonation>(typed: &[T], bytes: &mut Vec<u8>) {
 
 /// Decodes a binary buffer into a reference to a typed vector.
 ///
-/// `decode` will read a `&[T]` amount of data from the head of `bytes`, and then use the length
+/// `decode` first reads a `&[T]` amount of data from the head of `bytes`, and then use the length
 /// there to read enough additional data from `bytes` to back its memory. It will then `exhume`
 /// each element, offering them the ability to consume prefixes of `bytes` to back any owned data.
 ///
@@ -90,20 +92,23 @@ pub fn encode<T: Abomonation>(typed: &[T], bytes: &mut Vec<u8>) {
 /// let vector = (0..256u64).map(|i| (i, format!("{}", i)))
 ///                         .collect::<Vec<_>>();
 ///
-/// // encode vector into a Vec<u8>
+/// // encode a &[(u64, String)] into a Vec<u8>
 /// let mut bytes = Vec::new();
-/// encode(&vector[..], &mut bytes);
+/// encode(&vector, &mut bytes);
 ///
-/// // decode a &Vec<(u64, String)> from binary data
+/// // decode a &[(u64, String)] from &mut [u8] binary data
 /// if let Ok(result) = decode::<(u64, String)>(&mut bytes) {
 ///     assert!(result == &vector[..]);
 /// }
 /// ```
 pub fn decode<T: Abomonation>(bytes: &mut [u8]) -> Result<&[T], &mut [u8]> {
-    let (split1, split2) = bytes.split_at_mut(mem::size_of::<&[T]>());
-    let result: &mut &[T] = unsafe { mem::transmute(split1.get_unchecked_mut(0)) };
-    unsafe { try!(result.exhume(split2)); }
-    Ok(result)
+    if bytes.len() < mem::size_of::<&[T]>() { Err(bytes) }
+    else {
+        let (split1, split2) = bytes.split_at_mut(mem::size_of::<&[T]>());
+        let result: &mut &[T] = unsafe { mem::transmute(split1.get_unchecked_mut(0)) };
+        unsafe { try!(result.exhume(split2)); }
+        Ok(result)
+    }
 }
 
 /// Abomonation provides methods to serialize any heap data the implementor owns.
@@ -116,6 +121,9 @@ pub fn decode<T: Abomonation>(bytes: &mut [u8]) -> Result<&[T], &mut [u8]> {
 /// Abomonation has no safe methods. Please do not call them. They should be called only by
 /// `encode` and `decode`, each of which impose restrictions on ownership and lifetime of the data
 /// they take as input and return as output.
+///
+/// If you are concerned about safety, it may be best to avoid Abomonation all together. It does
+/// several things that may be undefined behavior, depending on how undefined behavior is defined.
 pub trait Abomonation {
 
     /// Write any additional information about `&self` beyond its binary representation.
@@ -123,9 +131,10 @@ pub trait Abomonation {
     /// Most commonly this is owned data on the other end of pointers in `&self`.
     unsafe fn entomb(&self, _writer: &mut Vec<u8>) { }
 
-    /// Perform any final edits before committing `&mut self`.
+    /// Perform any final edits before committing `&mut self`. Importantly, this method should only
+    /// manipulate the fields of `self`; any owned memory may not be valid.
     ///
-    /// Most commonly this overwrites pointers whose values should not be recorded.
+    /// Most commonly this overwrites pointers whose values should not be serialized.
     unsafe fn embalm(&mut self) { }
 
     /// Recover any information for `&mut self` not evident from its binary representation.
@@ -140,7 +149,9 @@ impl Abomonation for u32 { }
 impl Abomonation for u64 {
     // TODO : if these were optimized out, hooray! unfortunately, they aren't.
     // unsafe fn embalm(&mut self) { *self = (*self).to_le(); }
-    // unsafe fn exhume(&mut self, bytes: &mut &[u8]) -> Result<(), ()> { *self = u64::from_le(*self); Ok(()) }
+    // unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Result<&'b mut [u8], &'b mut [u8]> {
+    //     *self = u64::from_le(*self); Ok(bytes)
+    // }
 }
 
 impl Abomonation for i8 { }
@@ -152,6 +163,7 @@ impl Abomonation for f32 { }
 impl Abomonation for f64 { }
 
 impl Abomonation for bool { }
+impl Abomonation for () {}
 
 impl<T: Abomonation> Abomonation for Option<T> { }
 
@@ -161,6 +173,29 @@ impl<T1: Abomonation, T2: Abomonation> Abomonation for (T1, T2) {
     unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Result<&'b mut [u8], &'b mut [u8]> {
         let tmp = bytes; bytes = try!(self.0.exhume(tmp));
         let tmp = bytes; bytes = try!(self.1.exhume(tmp));
+        Ok(bytes)
+    }
+}
+
+impl<T1: Abomonation, T2: Abomonation, T3: Abomonation> Abomonation for (T1, T2, T3) {
+    unsafe fn embalm(&mut self) { self.0.embalm(); self.1.embalm(); self.2.embalm(); }
+    unsafe fn entomb(&self, bytes: &mut Vec<u8>) { self.0.entomb(bytes); self.1.entomb(bytes); self.2.entomb(bytes); }
+    unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Result<&'b mut [u8], &'b mut [u8]> {
+        let tmp = bytes; bytes = try!(self.0.exhume(tmp));
+        let tmp = bytes; bytes = try!(self.1.exhume(tmp));
+        let tmp = bytes; bytes = try!(self.2.exhume(tmp));
+        Ok(bytes)
+    }
+}
+
+impl<T1: Abomonation, T2: Abomonation, T3: Abomonation, T4: Abomonation> Abomonation for (T1, T2, T3, T4) {
+    unsafe fn embalm(&mut self) { self.0.embalm(); self.1.embalm(); self.2.embalm(); self.3.embalm(); }
+    unsafe fn entomb(&self, bytes: &mut Vec<u8>) { self.0.entomb(bytes); self.1.entomb(bytes); self.2.entomb(bytes); self.3.entomb(bytes); }
+    unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Result<&'b mut [u8], &'b mut [u8]> {
+        let tmp = bytes; bytes = try!(self.0.exhume(tmp));
+        let tmp = bytes; bytes = try!(self.1.exhume(tmp));
+        let tmp = bytes; bytes = try!(self.2.exhume(tmp));
+        let tmp = bytes; bytes = try!(self.3.exhume(tmp));
         Ok(bytes)
     }
 }
@@ -222,7 +257,7 @@ impl<'c, T: Abomonation> Abomonation for &'c [T] {
     }
     unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Result<&'b mut [u8], &'b mut [u8]> {
 
-        // extract memory from bytes to back our vector
+        // extract memory from bytes to back our slice
         let binary_len = self.len() * mem::size_of::<T>();
         if binary_len > bytes.len() { Err(bytes) }
         else {
@@ -232,17 +267,18 @@ impl<'c, T: Abomonation> Abomonation for &'c [T] {
                 let temp = rest;
                 rest = try!(element.exhume(temp));
             }
-            std::ptr::write(self, slice);   // <-- avoids dropping any referents (invalid anyhow)
+            *self = slice;
             Ok(rest)
         }
     }
 }
 
-
+// currently enables UB, by exposing padding bytes
 unsafe fn typed_to_bytes<T>(slice: &[T]) -> &[u8] {
     std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len() * mem::size_of::<T>())
 }
 
+// takes a len to make working with zero-size types easier
 unsafe fn bytes_to_typed<T>(slice: &mut [u8], len: usize) -> &mut [T] {
     std::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut T, len)
 }
