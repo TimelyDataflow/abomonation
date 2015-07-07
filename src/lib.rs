@@ -69,10 +69,11 @@ use std::io::Write; // for bytes.write_all; push_all is unstable and extend is s
 /// ```
 ///
 pub fn encode<T: Abomonation>(typed: &[T], bytes: &mut Vec<u8>) {
+    //
     unsafe {
         let slice = std::slice::from_raw_parts(mem::transmute(&typed), mem::size_of::<&[T]>());
         bytes.write_all(slice).unwrap();    // Rust claims a write to a Vec<u8> will never fail.
-        let result: &mut Vec<T> = mem::transmute(bytes.get_unchecked_mut(0));
+        let result: &mut &[T] = mem::transmute(bytes.get_unchecked_mut(0));
         result.embalm();
         typed.entomb(bytes);
     }
@@ -146,13 +147,7 @@ pub trait Abomonation {
 impl Abomonation for u8 { }
 impl Abomonation for u16 { }
 impl Abomonation for u32 { }
-impl Abomonation for u64 {
-    // TODO : if these were optimized out, hooray! unfortunately, they aren't.
-    // unsafe fn embalm(&mut self) { *self = (*self).to_le(); }
-    // unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Result<&'b mut [u8], &'b mut [u8]> {
-    //     *self = u64::from_le(*self); Ok(bytes)
-    // }
-}
+impl Abomonation for u64 { }
 
 impl Abomonation for i8 { }
 impl Abomonation for i16 { }
