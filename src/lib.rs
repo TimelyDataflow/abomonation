@@ -27,25 +27,57 @@
 //! let vector = (0..256u64).map(|i| (i, format!("{}", i)))
 //!                         .collect::<Vec<_>>();
 //!
-//! // encode a &[(u64, String)] into a Vec<u8>
+//! // encode a Vec<(u64, String)> into a Vec<u8>
 //! let mut bytes = Vec::new();
 //! encode(&vector, &mut bytes);
 //!
 //! // decode a &[(u64, String)] from &mut [u8] binary data
-//! if let Ok(result) = decode::<(u64, String)>(&mut bytes) {
-//!     assert!(result == &vector[..]);
+//! if let Ok(result) = decode::<Vec<(u64, String)>>(&mut bytes) {
+//!     assert!(result == &vector);
 //! }
 //! ```
 
-// extern crate num;
-
 use std::mem;       // yup, used pretty much everywhere.
 use std::io::Write; // for bytes.write_all; push_all is unstable and extend is slow.
-// use std::traits::PrimInt;
 
-/// Encodes a vector of typed data into a binary buffer.
+/// Encodes a typed element into a binary buffer.
 ///
-/// `encode` will transmute `typed` to binary and write its contents to `bytes`. After doing this,
+/// `encode` will transmute `typed` to binary and write its contents to `bytes`. It then offers the
+/// element the opportunity to serialize more data. Having done that,
+/// it offers the element the opportunity to "tidy up", in which the element can erasing things
+/// like local memory addresses that it would be impolite to share.
+///
+/// #Examples
+/// ```
+/// use abomonation::{encode, decode};
+///
+/// // create some test data out of abomonation-approved types
+/// let vector = (0..256u64).map(|i| (i, format!("{}", i)))
+///                         .collect::<Vec<_>>();
+///
+/// // encode a Vec<(u64, String)> into a Vec<u8>
+/// let mut bytes = Vec::new();
+/// encode(&vector, &mut bytes);
+///
+/// // decode a &Vec<(u64, String)> from &mut [u8] binary data
+/// if let Ok(result) = decode::<Vec<(u64, String)>>(&mut bytes) {
+///     assert!(result == &vector);
+/// }
+/// ```
+///
+pub fn encode<T: Abomonation>(typed: &T, bytes: &mut Vec<u8>) {
+    unsafe {
+        let slice = std::slice::from_raw_parts(mem::transmute(typed), mem::size_of::<T>());
+        bytes.write_all(slice).unwrap();    // Rust claims a write to a Vec<u8> will never fail.
+        let result: &mut T = mem::transmute(bytes.get_unchecked_mut(0));
+        result.embalm();
+        typed.entomb(bytes);
+    }
+}
+
+/// Encodes a slice of typed data into a binary buffer.
+///
+/// `encode_slice` will transmute `typed` to binary and write its contents to `bytes`. After this,
 /// it will offer each element of typed the opportunity to serialize more data. Having done that,
 /// it offers each element the opportunity to "tidy up", in which the elements can erasing things
 /// like local memory addresses that it would be impolite to share.
@@ -58,18 +90,17 @@ use std::io::Write; // for bytes.write_all; push_all is unstable and extend is s
 /// let vector = (0..256u64).map(|i| (i, format!("{}", i)))
 ///                         .collect::<Vec<_>>();
 ///
-/// // encode a &[(u64, String)] into a Vec<u8>
+/// // encode a Vec<(u64, String)> into a Vec<u8>
 /// let mut bytes = Vec::new();
 /// encode(&vector, &mut bytes);
 ///
-/// // decode a &[(u64, String)] from &mut [u8] binary data
-/// if let Ok(result) = decode::<(u64, String)>(&mut bytes) {
-///     assert!(result == &vector[..]);
+/// // decode a &Vec<(u64, String)> from &mut [u8] binary data
+/// if let Ok(result) = decode::<Vec<(u64, String)>>(&mut bytes) {
+///     assert!(result == &vector);
 /// }
 /// ```
 ///
-pub fn encode<T: Abomonation>(typed: &[T], bytes: &mut Vec<u8>) {
-    //
+pub fn encode_slice<T: Abomonation>(typed: &[T], bytes: &mut Vec<u8>) {
     unsafe {
         let slice = std::slice::from_raw_parts(mem::transmute(&typed), mem::size_of::<&[T]>());
         bytes.write_all(slice).unwrap();    // Rust claims a write to a Vec<u8> will never fail.
@@ -79,11 +110,10 @@ pub fn encode<T: Abomonation>(typed: &[T], bytes: &mut Vec<u8>) {
     }
 }
 
-/// Decodes a binary buffer into a reference to a typed vector.
+/// Decodes a binary buffer into a reference to a typed element.
 ///
-/// `decode` first reads a `&[T]` amount of data from the head of `bytes`, and then use the length
-/// there to read enough additional data from `bytes` to back its memory. It will then `exhume`
-/// each element, offering them the ability to consume prefixes of `bytes` to back any owned data.
+/// `decode` treats the first `mem::size_of::<T>()` bytes as a T, and will then `exhume` the
+/// element, offering it the ability to consume prefixes of `bytes` to back any owned data.
 ///
 /// #Examples
 /// ```
@@ -93,16 +123,49 @@ pub fn encode<T: Abomonation>(typed: &[T], bytes: &mut Vec<u8>) {
 /// let vector = (0..256u64).map(|i| (i, format!("{}", i)))
 ///                         .collect::<Vec<_>>();
 ///
-/// // encode a &[(u64, String)] into a Vec<u8>
+/// // encode a Vec<(u64, String)> into a Vec<u8>
 /// let mut bytes = Vec::new();
 /// encode(&vector, &mut bytes);
 ///
-/// // decode a &[(u64, String)] from &mut [u8] binary data
-/// if let Ok(result) = decode::<(u64, String)>(&mut bytes) {
+/// // decode a &Vec<(u64, String)> from &mut [u8] binary data
+/// if let Ok(result) = decode::<Vec<(u64, String)>>(&mut bytes) {
+///     assert!(result == &vector);
+/// }
+/// ```
+pub fn decode<T: Abomonation>(bytes: &mut [u8]) -> Result<&T, &mut [u8]> {
+    if bytes.len() < mem::size_of::<T>() { Err(bytes) }
+    else {
+        let (split1, split2) = bytes.split_at_mut(mem::size_of::<T>());
+        let result: &mut T = unsafe { mem::transmute(split1.get_unchecked_mut(0)) };
+        unsafe { try!(result.exhume(split2)); }
+        Ok(result)
+    }
+}
+
+/// Decodes a binary buffer into a reference to a typed slice.
+///
+/// `decode_slice` first reads a `&[T]` amount of data from the head of `bytes`, using the length
+/// there to read enough additional data from `bytes` to back its memory. It will then `exhume`
+/// each element, offering them the ability to consume prefixes of `bytes` to back any owned data.
+///
+/// #Examples
+/// ```
+/// use abomonation::{encode_slice, decode_slice};
+///
+/// // create some test data out of abomonation-approved types
+/// let vector = (0..256u64).map(|i| (i, format!("{}", i)))
+///                         .collect::<Vec<_>>();
+///
+/// // encode a Vec<(u64, String)> into a Vec<u8>
+/// let mut bytes = Vec::new();
+/// encode_slice(&vector, &mut bytes);
+///
+/// // decode a &Vec<(u64, String)> from &mut [u8] binary data
+/// if let Ok(result) = decode_slice::<(u64, String)>(&mut bytes) {
 ///     assert!(result == &vector[..]);
 /// }
 /// ```
-pub fn decode<T: Abomonation>(bytes: &mut [u8]) -> Result<&[T], &mut [u8]> {
+pub fn decode_slice<T: Abomonation>(bytes: &mut [u8]) -> Result<&[T], &mut [u8]> {
     if bytes.len() < mem::size_of::<&[T]>() { Err(bytes) }
     else {
         let (split1, split2) = bytes.split_at_mut(mem::size_of::<&[T]>());
@@ -111,6 +174,7 @@ pub fn decode<T: Abomonation>(bytes: &mut [u8]) -> Result<&[T], &mut [u8]> {
         Ok(result)
     }
 }
+
 
 /// Abomonation provides methods to serialize any heap data the implementor owns.
 ///
