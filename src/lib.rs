@@ -224,7 +224,24 @@ impl Abomonation for f64 { }
 impl Abomonation for bool { }
 impl Abomonation for () {}
 
-impl<T: Abomonation> Abomonation for Option<T> { }
+impl<T: Abomonation> Abomonation for Option<T> {
+    unsafe fn embalm(&mut self) {
+        if let &mut Some(ref mut inner) = self {
+            inner.embalm();
+        }
+    }
+    unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
+        if let &Some(ref inner) = self {
+            inner.entomb(bytes);
+        }
+    }
+    unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut[u8]) -> Result<&'b mut [u8], &'b mut [u8]> {
+        if let &mut Some(ref mut inner) = self {
+            let tmp = bytes; bytes = try!(inner.exhume(tmp));
+        }
+        Ok(bytes)
+    }
+}
 
 impl<T1: Abomonation, T2: Abomonation> Abomonation for (T1, T2) {
     unsafe fn embalm(&mut self) { self.0.embalm(); self.1.embalm(); }
