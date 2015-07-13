@@ -40,6 +40,8 @@
 use std::mem;       // yup, used pretty much everywhere.
 use std::io::Write; // for bytes.write_all; push_all is unstable and extend is slow.
 
+const EMPTY: *mut () = 0x1 as *mut ();
+
 /// Encodes a typed element into a binary buffer.
 ///
 /// `encode` will transmute `typed` to binary and write its contents to `bytes`. It then offers the
@@ -278,7 +280,7 @@ impl<T1: Abomonation, T2: Abomonation, T3: Abomonation, T4: Abomonation> Abomona
 
 impl Abomonation for String {
     unsafe fn embalm(&mut self) {
-        std::ptr::write(self, String::from_raw_parts(0 as *mut u8, self.len(), self.len()));
+        std::ptr::write(self, String::from_raw_parts(EMPTY as *mut u8, self.len(), self.len()));
     }
     unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
         bytes.write_all(self.as_bytes()).unwrap();
@@ -295,7 +297,7 @@ impl Abomonation for String {
 
 impl<T: Abomonation> Abomonation for Vec<T> {
     unsafe fn embalm(&mut self) {
-        std::ptr::write(self, Vec::from_raw_parts(0 as *mut T, self.len(), self.len()));
+        std::ptr::write(self, Vec::from_raw_parts(EMPTY as *mut T, self.len(), self.len()));
     }
     unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
         let position = bytes.len();
@@ -323,7 +325,7 @@ impl<T: Abomonation> Abomonation for Vec<T> {
 
 impl<'c, T: Abomonation> Abomonation for &'c [T] {
     unsafe fn embalm(&mut self) {
-        std::ptr::write(self, std::slice::from_raw_parts(0 as *mut T, self.len()));
+        std::ptr::write(self, std::slice::from_raw_parts(EMPTY as *mut T, self.len()));
     }
     unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
         let position = bytes.len();

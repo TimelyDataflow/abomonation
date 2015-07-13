@@ -1,6 +1,7 @@
 extern crate abomonation;
 use abomonation::*;
 
+#[test] fn test_option_vec() { _test_pass(vec![Some(vec![0, 1, 2])]); }
 #[test] fn test_u32x4_pass() { _test_pass(vec![((1,2,3),vec![(0u32, 0u32, 0u32, 0u32); 1024])]); }
 #[test] fn test_u64_pass() { _test_pass(vec![0u64; 1024]); }
 #[test] fn test_string_pass() { _test_pass(vec![format!("grawwwwrr!"); 1024]); }
