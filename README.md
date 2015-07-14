@@ -51,7 +51,7 @@ Abomonation comes with the `abomonate!` macro implementing `Abomonation` for str
 extern crate abomonation;
 use abomonation::{encode, decode};
 
-#[derive(Eq)]
+#[derive(Eq, PartialEq)]
 struct MyStruct {
     pub a: String,
     pub b: u64,
