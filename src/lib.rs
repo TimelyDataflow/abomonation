@@ -351,6 +351,28 @@ impl<'c, T: Abomonation> Abomonation for &'c [T] {
     }
 }
 
+impl<T: Abomonation> Abomonation for Box<T> {
+    unsafe fn embalm(&mut self) {
+        std::ptr::write(self, mem::transmute(EMPTY as *mut T));
+    }
+    unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
+        let position = bytes.len();
+        bytes.write_all(std::slice::from_raw_parts(mem::transmute(&**self), mem::size_of::<T>())).unwrap();
+        bytes_to_typed::<T>(&mut bytes[position..], 1)[0].embalm();
+        (**self).entomb(bytes);
+    }
+    unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Result<&'b mut [u8], &'b mut [u8]> {
+        let binary_len = mem::size_of::<T>();
+        if binary_len > bytes.len() { Err(bytes) }
+        else {
+            let (mine, mut rest) = bytes.split_at_mut(binary_len);
+            std::ptr::write(self, mem::transmute(mine.as_mut_ptr() as *mut T));
+            let temp = rest; rest = try!((**self).exhume(temp));
+            Ok(rest)
+        }
+    }
+}
+
 // currently enables UB, by exposing padding bytes
 unsafe fn typed_to_bytes<T>(slice: &[T]) -> &[u8] {
     std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len() * mem::size_of::<T>())

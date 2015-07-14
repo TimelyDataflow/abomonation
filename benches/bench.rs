@@ -29,50 +29,44 @@ use std::io::Read;
 #[bench] fn enc_vec_u_vn_s(bencher: &mut Bencher) { _bench_enc(bencher, vec![vec![(0u64, vec![(); 1 << 40], format!("grawwwwrr!")); 32]; 32]); }
 #[bench] fn dec_vec_u_vn_s(bencher: &mut Bencher) { _bench_dec(bencher, vec![vec![(0u64, vec![(); 1 << 40], format!("grawwwwrr!")); 32]; 32]); }
 
-fn _bench_enc<T: Abomonation>(bencher: &mut Bencher, vector: Vec<T>) {
+fn _bench_enc<T: Abomonation>(bencher: &mut Bencher, record: T) {
 
     // prepare encoded data for bencher.bytes
     let mut bytes = Vec::new();
-    encode(&vector, &mut bytes);
+    encode(&record, &mut bytes);
 
     // repeatedly encode this many bytes
     bencher.bytes = bytes.len() as u64;
     bencher.iter(|| {
         bytes.clear();
-        encode(&vector, &mut bytes);
+        encode(&record, &mut bytes);
     });
 }
 
-fn _bench_dec<T: Abomonation+Eq>(bencher: &mut Bencher, vector: Vec<T>) {
+fn _bench_dec<T: Abomonation+Eq>(bencher: &mut Bencher, record: T) {
 
     // prepare encoded data
     let mut bytes = Vec::new();
-    encode(&vector, &mut bytes);
+    encode(&record, &mut bytes);
 
     // repeatedly decode (and validate)
     bencher.bytes = bytes.len() as u64;
     bencher.iter(|| {
-        let result = decode::<Vec<T>>(&mut bytes).unwrap();
-        assert!(result.len() == vector.len());
-        for i in 0..result.len() {
-            assert!(result[i] == vector[i]);
-        }
+        let result = decode::<T>(&mut bytes).unwrap();
+        assert!(&record == result);
     });
 }
 
-fn _bench_own<T: Abomonation+Eq+Clone>(bencher: &mut Bencher, vector: Vec<T>) {
+fn _bench_own<T: Abomonation+Eq+Clone>(bencher: &mut Bencher, record: T) {
 
     // prepare encoded data
     let mut bytes = Vec::new();
-    encode(&vector, &mut bytes);
+    encode(&record, &mut bytes);
 
     // repeatedly decode (and validate)
     bencher.bytes = bytes.len() as u64;
     bencher.iter(|| {
-        let result = (*decode::<Vec<T>>(&mut bytes[..]).unwrap()).to_vec();
-        assert!(result.len() == vector.len());
-        for i in 0..result.len() {
-            assert!(result[i] == vector[i]);
-        }
+        let result = (*decode::<T>(&mut bytes[..]).unwrap()).clone();
+        assert!(record == result);
     });
 }
