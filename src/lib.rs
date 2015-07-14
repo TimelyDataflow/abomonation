@@ -210,6 +210,25 @@ pub trait Abomonation {
     unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Result<&'b mut [u8], &'b mut [u8]> { Ok(bytes) }
 }
 
+#[macro_export]
+macro_rules! abomonate {
+    ($t:ty) => { impl Abomonation for $t { } };
+    ($t:ty : $($field:ident),*) => {
+        impl Abomonation for $t {
+            unsafe fn entomb(&self, _writer: &mut Vec<u8>) {
+                $( self.$field.entomb(_writer); )*
+            }
+            unsafe fn embalm(&mut self) {
+                $( self.$field.embalm(); )*
+            }
+            unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Result<&'b mut [u8], &'b mut [u8]> {
+                $( let temp = bytes; bytes = try!(self.$field.exhume(temp)); )*
+                Ok(bytes)
+            }
+        }
+    }
+}
+
 impl Abomonation for u8 { }
 impl Abomonation for u16 { }
 impl Abomonation for u32 { }

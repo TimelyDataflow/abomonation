@@ -8,6 +8,7 @@ Abomonation (spelling intentional) is a serialization library for Rust based on 
 Here is an example of using Abomonation. It is very easy to use. Frighteningly easy.
 
 ```rust
+extern crate abomonation;
 use abomonation::{encode, decode};
 
 // create some test data out of abomonation-approved types
@@ -40,3 +41,37 @@ They also repeatedly decode the same data, giving numbers like:
     test bench_dec_vec_u_s ... bench:     12557 ns/iter (+/- 2183) = 3488 MB/s
 
 Be warned that these numbers are not *goodput*, but rather the total number of bytes moved, which is equal to the in-memory representation of the data. On a 64bit system, a `String` requires 24 bytes plus one byte per character, which can be a lot of overhead for small strings.
+
+## abomonate!
+
+Abomonation comes with the `abomonate!` macro implementing `Abomonation` for structs which are essentially equivalent to a tuple of other `Abomonable` types. To use the macro, you must put the `#[macro_use]` modifier before `extern crate abomonation;`.
+
+```rust
+#[macro_use]
+extern crate abomonation;
+use abomonation::{encode, decode};
+
+#[derive(Eq)]
+struct MyStruct {
+    pub a: String,
+    pub b: u64,
+    pub c: Vec<u8>,
+}
+
+// (type : field1, field2 .. )
+abomonate!(MyStruct : a, b, c);
+
+// create some test data out of abomonation-approved types
+let record = MyStruct{ a: "test".to_owned(), b: 0, c: vec![0, 1, 2] };
+
+// encode vector into a Vec<u8>
+let mut bytes = Vec::new();
+encode(&record, &mut bytes);
+
+// decode a &Vec<(u64, String)> from binary data
+if let Ok(result) = decode::<MyStruct>(&mut bytes) {
+    assert!(result == &record);
+}
+```
+
+Be warned that implementing `Abomonable` for types can be a giant disaster and is entirely discouraged.

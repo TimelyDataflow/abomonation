@@ -1,3 +1,4 @@
+#[macro_use]
 extern crate abomonation;
 use abomonation::*;
 
@@ -25,4 +26,28 @@ fn _test_fail<T: Abomonation>(record: T) {
     bytes.pop();
     if let Ok(_) = decode::<T>(&mut bytes[..]) { panic!() }
     else { }
+}
+
+#[derive(Eq, PartialEq)]
+struct MyStruct {
+    a: String,
+    b: u64,
+    c: Vec<u8>,
+}
+
+abomonate!(MyStruct : a, b, c);
+
+#[test]
+fn test_macro() {
+    // create some test data out of abomonation-approved types
+    let record = MyStruct{ a: "test".to_owned(), b: 0, c: vec![0, 1, 2] };
+
+    // encode vector into a Vec<u8>
+    let mut bytes = Vec::new();
+    encode(&record, &mut bytes);
+
+    // decode a &Vec<(u64, String)> from binary data
+    if let Ok(result) = decode::<MyStruct>(&mut bytes) {
+        assert!(result == &record);
+    }
 }
