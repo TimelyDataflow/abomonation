@@ -52,7 +52,7 @@ fn _bench_dec<T: Abomonation+Eq>(bencher: &mut Bencher, record: T) {
     // repeatedly decode (and validate)
     bencher.bytes = bytes.len() as u64;
     bencher.iter(|| {
-        let result = decode::<T>(&mut bytes).unwrap();
+        let result = decode::<T>(&mut bytes).unwrap().0;
         assert!(&record == result);
     });
 }
@@ -66,7 +66,7 @@ fn _bench_own<T: Abomonation+Eq+Clone>(bencher: &mut Bencher, record: T) {
     // repeatedly decode (and validate)
     bencher.bytes = bytes.len() as u64;
     bencher.iter(|| {
-        let result = (*decode::<T>(&mut bytes[..]).unwrap()).clone();
+        let result = (*decode::<T>(&mut bytes[..]).unwrap().0).clone();
         assert!(record == result);
     });
 }

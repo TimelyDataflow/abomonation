@@ -1,17 +1,15 @@
 //! Abomonation (spelling intentional) is a fast serialization / deserialization crate.
 //!
-//! Abomonation takes vectors of types and simply writes their contents as binary.
-//! It then gives each typed element of the vector the opportunity to serialize more data, which is
+//! Abomonation takes typed elements and simply writes their contents as binary.
+//! It then gives the element the opportunity to serialize more data, which is
 //! useful for types with owned memory such as `String` and `Vec`.
 //! The result is effectively a copy of reachable memory, where pointers are zero-ed out and vector
 //! capacities are set to the vector length.
-//! Deserialization results in a shared slice, where internal pointers reference locations in the
-//! binary data itself.
+//! Deserialization results in a shared reference to the type, pointing at the binary data itself.
 //!
 //! Abomonation does several unsafe things, and should ideally be used only through the methods
-//! `encode` and `decode` on types implementing the `Abomonation` trait.
-//! Implementing the `Abomonation` trait is highly discouraged, unless you are just doing a
-//! copy/paste of the tuple code for your struct.
+//! `encode` and `decode` on types implementing the `Abomonation` trait. Implementing the
+//! `Abomonation` trait is highly discouraged, unless you use the `abomonate!` macro
 //!
 //! **Very important**: Abomonation reproduces the memory as laid out by the serializer, which can
 //! reveal architectural variations. Data encoded on a 32bit big-endian machine will not decode
@@ -31,9 +29,10 @@
 //! let mut bytes = Vec::new();
 //! encode(&vector, &mut bytes);
 //!
-//! // decode a &[(u64, String)] from &mut [u8] binary data
-//! if let Ok(result) = decode::<Vec<(u64, String)>>(&mut bytes) {
+//! // decode a &Vec<(u64, String)> from &mut [u8] binary data
+//! if let Ok((result, remaining)) = decode::<Vec<(u64, String)>>(&mut bytes) {
 //!     assert!(result == &vector);
+//!     assert!(remaining.len() == 0);
 //! }
 //! ```
 
@@ -62,8 +61,9 @@ const EMPTY: *mut () = 0x1 as *mut ();
 /// encode(&vector, &mut bytes);
 ///
 /// // decode a &Vec<(u64, String)> from &mut [u8] binary data
-/// if let Ok(result) = decode::<Vec<(u64, String)>>(&mut bytes) {
+/// if let Ok((result, remaining)) = decode::<Vec<(u64, String)>>(&mut bytes) {
 ///     assert!(result == &vector);
+///     assert!(remaining.len() == 0);
 /// }
 /// ```
 ///
@@ -77,45 +77,13 @@ pub fn encode<T: Abomonation>(typed: &T, bytes: &mut Vec<u8>) {
     }
 }
 
-/// Encodes a slice of typed data into a binary buffer.
-///
-/// `encode_slice` will transmute `typed` to binary and write its contents to `bytes`. After this,
-/// it will offer each element of typed the opportunity to serialize more data. Having done that,
-/// it offers each element the opportunity to "tidy up", in which the elements can erasing things
-/// like local memory addresses that it would be impolite to share.
-///
-/// #Examples
-/// ```
-/// use abomonation::{encode, decode};
-///
-/// // create some test data out of abomonation-approved types
-/// let vector = (0..256u64).map(|i| (i, format!("{}", i)))
-///                         .collect::<Vec<_>>();
-///
-/// // encode a Vec<(u64, String)> into a Vec<u8>
-/// let mut bytes = Vec::new();
-/// encode(&vector, &mut bytes);
-///
-/// // decode a &Vec<(u64, String)> from &mut [u8] binary data
-/// if let Ok(result) = decode::<Vec<(u64, String)>>(&mut bytes) {
-///     assert!(result == &vector);
-/// }
-/// ```
-///
-pub fn encode_slice<T: Abomonation>(typed: &[T], bytes: &mut Vec<u8>) {
-    unsafe {
-        let slice = std::slice::from_raw_parts(mem::transmute(&typed), mem::size_of::<&[T]>());
-        bytes.write_all(slice).unwrap();    // Rust claims a write to a Vec<u8> will never fail.
-        let result: &mut &[T] = mem::transmute(bytes.get_unchecked_mut(0));
-        result.embalm();
-        typed.entomb(bytes);
-    }
-}
-
 /// Decodes a binary buffer into a reference to a typed element.
 ///
-/// `decode` treats the first `mem::size_of::<T>()` bytes as a T, and will then `exhume` the
+/// `decode` treats the first `mem::size_of::<T>()` bytes as a `T`, and will then `exhume` the
 /// element, offering it the ability to consume prefixes of `bytes` to back any owned data.
+/// The return value is either a pair of the typed reference `&T` and the remaining `&mut [u8]`
+/// binary data if the deserialization found enough data, or the remaining `&mut [u8]` at the
+/// point where it ran out of data.
 ///
 /// #Examples
 /// ```
@@ -130,52 +98,21 @@ pub fn encode_slice<T: Abomonation>(typed: &[T], bytes: &mut Vec<u8>) {
 /// encode(&vector, &mut bytes);
 ///
 /// // decode a &Vec<(u64, String)> from &mut [u8] binary data
-/// if let Ok(result) = decode::<Vec<(u64, String)>>(&mut bytes) {
+/// if let Ok((result, remaining)) = decode::<Vec<(u64, String)>>(&mut bytes) {
 ///     assert!(result == &vector);
+///     assert!(remaining.len() == 0);
 /// }
 /// ```
-pub fn decode<T: Abomonation>(bytes: &mut [u8]) -> Result<&T, &mut [u8]> {
+pub fn decode<T: Abomonation>(bytes: &mut [u8]) -> Result<(&T, &mut [u8]), &mut [u8]> {
     if bytes.len() < mem::size_of::<T>() { Err(bytes) }
     else {
         let (split1, split2) = bytes.split_at_mut(mem::size_of::<T>());
         let result: &mut T = unsafe { mem::transmute(split1.get_unchecked_mut(0)) };
-        unsafe { try!(result.exhume(split2)); }
-        Ok(result)
+        let bytes = unsafe { try!(result.exhume(split2)) };
+        Ok((result, bytes))
     }
 }
 
-/// Decodes a binary buffer into a reference to a typed slice.
-///
-/// `decode_slice` first reads a `&[T]` amount of data from the head of `bytes`, using the length
-/// there to read enough additional data from `bytes` to back its memory. It will then `exhume`
-/// each element, offering them the ability to consume prefixes of `bytes` to back any owned data.
-///
-/// #Examples
-/// ```
-/// use abomonation::{encode_slice, decode_slice};
-///
-/// // create some test data out of abomonation-approved types
-/// let vector = (0..256u64).map(|i| (i, format!("{}", i)))
-///                         .collect::<Vec<_>>();
-///
-/// // encode a Vec<(u64, String)> into a Vec<u8>
-/// let mut bytes = Vec::new();
-/// encode_slice(&vector, &mut bytes);
-///
-/// // decode a &Vec<(u64, String)> from &mut [u8] binary data
-/// if let Ok(result) = decode_slice::<(u64, String)>(&mut bytes) {
-///     assert!(result == &vector[..]);
-/// }
-/// ```
-pub fn decode_slice<T: Abomonation>(bytes: &mut [u8]) -> Result<&[T], &mut [u8]> {
-    if bytes.len() < mem::size_of::<&[T]>() { Err(bytes) }
-    else {
-        let (split1, split2) = bytes.split_at_mut(mem::size_of::<&[T]>());
-        let result: &mut &[T] = unsafe { mem::transmute(split1.get_unchecked_mut(0)) };
-        unsafe { try!(result.exhume(split2)); }
-        Ok(result)
-    }
-}
 
 
 /// Abomonation provides methods to serialize any heap data the implementor owns.
@@ -210,6 +147,41 @@ pub trait Abomonation {
     unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Result<&'b mut [u8], &'b mut [u8]> { Ok(bytes) }
 }
 
+/// The `abomonate!` macro takes a type name with an optional list of fields, and implements
+/// 'Abomonation' for the type, following the pattern of the tuple implementations: each method
+/// calls the equivalent method on each of its fields.
+///
+/// #Examples
+/// ```
+/// #[macro_use]
+/// extern crate abomonation;
+/// use abomonation::{encode, decode, Abomonation};
+///
+/// #[derive(Eq, PartialEq)]
+/// struct MyStruct {
+///     a: String,
+///     b: u64,
+///     c: Vec<u8>,
+/// }
+///
+/// abomonate!(MyStruct : a, b, c);
+///
+/// fn main() {
+///
+///     // create some test data out of recently-abomonable types
+///     let my_struct = MyStruct { a: "grawwwwrr".to_owned(), b: 0, c: vec![1,2,3] };
+///
+///     // encode a &MyStruct into a Vec<u8>
+///     let mut bytes = Vec::new();
+///     encode(&my_struct, &mut bytes);
+///
+///     // decode a &MyStruct from &mut [u8] binary data
+///     if let Ok((result, remaining)) = decode::<MyStruct>(&mut bytes) {
+///         assert!(result == &my_struct);
+///         assert!(remaining.len() == 0);
+///     }
+/// }
+/// ```
 #[macro_export]
 macro_rules! abomonate {
     ($t:ty) => { impl Abomonation for $t { } };

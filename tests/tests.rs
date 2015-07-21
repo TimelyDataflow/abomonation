@@ -16,8 +16,9 @@ use abomonation::*;
 fn _test_pass<T: Abomonation+Eq>(record: T) {
     let mut bytes = Vec::new();
     encode(&record, &mut bytes);
-    let result = decode::<T>(&mut bytes[..]).unwrap();
+    let (result, rest) = decode::<T>(&mut bytes[..]).unwrap();
     assert!(&record == result);
+    assert!(rest.len() == 0);
 }
 
 fn _test_fail<T: Abomonation>(record: T) {
@@ -47,7 +48,8 @@ fn test_macro() {
     encode(&record, &mut bytes);
 
     // decode a &Vec<(u64, String)> from binary data
-    if let Ok(result) = decode::<MyStruct>(&mut bytes) {
+    if let Ok((result, rest)) = decode::<MyStruct>(&mut bytes) {
         assert!(result == &record);
+        assert!(rest.len() == 0);
     }
 }
