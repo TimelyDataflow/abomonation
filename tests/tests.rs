@@ -53,3 +53,17 @@ fn test_macro() {
         assert!(rest.len() == 0);
     }
 }
+
+#[test]
+fn test_multiple_encode_decode() {
+    let mut bytes = Vec::new();
+    encode(&0u32, &mut bytes);
+    encode(&7u64, &mut bytes);
+    encode(&vec![1,2,3], &mut bytes);
+    encode(&"grawwwwrr".to_owned(), &mut bytes);
+
+    let (t, r) = decode::<u32>(&mut bytes).unwrap(); assert!(*t == 0);
+    let (t, r) = decode::<u64>(r).unwrap(); assert!(*t == 7);
+    let (t, r) = decode::<Vec<i32>>(r).unwrap(); assert!(*t == vec![1,2,3]);
+    let (t, r) = decode::<String>(r).unwrap(); assert!(*t == "grawwwwrr".to_owned());
+}

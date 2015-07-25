@@ -70,9 +70,10 @@ const EMPTY: *mut () = 0x1 as *mut ();
 #[inline]
 pub fn encode<T: Abomonation>(typed: &T, bytes: &mut Vec<u8>) {
     unsafe {
+        let start = bytes.len();            // may not be empty!
         let slice = std::slice::from_raw_parts(mem::transmute(typed), mem::size_of::<T>());
         bytes.write_all(slice).unwrap();    // Rust claims a write to a Vec<u8> will never fail.
-        let result: &mut T = mem::transmute(bytes.get_unchecked_mut(0));
+        let result: &mut T = mem::transmute(bytes.as_mut_ptr().offset(start as isize));
         result.embalm();
         typed.entomb(bytes);
     }
