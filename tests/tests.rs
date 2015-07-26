@@ -16,16 +16,21 @@ use abomonation::*;
 fn _test_pass<T: Abomonation+Eq>(record: T) {
     let mut bytes = Vec::new();
     encode(&record, &mut bytes);
-    let (result, rest) = decode::<T>(&mut bytes[..]).unwrap();
-    assert!(&record == result);
-    assert!(rest.len() == 0);
+    {
+        let (result, rest) = decode::<T>(&mut bytes[..]).unwrap();
+        assert!(&record == result);
+        assert!(rest.len() == 0);
+    }
+    assert!(verify::<T>(&bytes[..]).is_some());
 }
 
 fn _test_fail<T: Abomonation>(record: T) {
     let mut bytes = Vec::new();
     encode(&record, &mut bytes);
     bytes.pop();
+    assert!(verify::<T>(&bytes[..]).is_none());
     assert!(decode::<T>(&mut bytes[..]).is_none());
+    assert!(verify::<T>(&bytes[..]).is_none());
 }
 
 #[derive(Eq, PartialEq)]
