@@ -25,8 +25,7 @@ fn _test_fail<T: Abomonation>(record: T) {
     let mut bytes = Vec::new();
     encode(&record, &mut bytes);
     bytes.pop();
-    if let Ok(_) = decode::<T>(&mut bytes[..]) { panic!() }
-    else { }
+    assert!(decode::<T>(&mut bytes[..]).is_none());
 }
 
 #[derive(Eq, PartialEq)]
@@ -36,7 +35,7 @@ struct MyStruct {
     c: Vec<u8>,
 }
 
-abomonate!(MyStruct : a, b, c);
+unsafe_abomonate!(MyStruct : a, b, c);
 
 #[test]
 fn test_macro() {
@@ -48,7 +47,7 @@ fn test_macro() {
     encode(&record, &mut bytes);
 
     // decode a &Vec<(u64, String)> from binary data
-    if let Ok((result, rest)) = decode::<MyStruct>(&mut bytes) {
+    if let Some((result, rest)) = decode::<MyStruct>(&mut bytes) {
         assert!(result == &record);
         assert!(rest.len() == 0);
     }

@@ -5,6 +5,8 @@ Abomonation (spelling intentional) is a serialization library for Rust based on 
 
 **Warning**: Abomonation should not be used on any data you care strongly about, or from any computer you value the data on. The `encode` and `decode` methods do things that are currently undefined behavior, and you shouldn't stand for that.
 
+Please consult the [abomonation documentation]( "https://frankmcsherry.github.com/abomonation") for more specific information.
+
 Here is an example of using Abomonation. It is very easy to use. Frighteningly easy.
 
 ```rust
@@ -29,23 +31,27 @@ When you use Abomonation things may go really fast. That is because it does so l
 
     cargo bench
 
-will trigger Rust's benchmarking infrastructure (or an error if you are using beta. bad luck). The tests repeatedly encode `Vec<u64>`, `Vec<String>`, and `Vec<Vec<(u64, String)>>` giving numbers like:
+will trigger Rust's benchmarking infrastructure (or an error if you are not using nightly. bad luck). The tests repeatedly encode `Vec<u64>`, `Vec<String>`, and `Vec<Vec<(u64, String)>>` giving numbers like:
 
-    test bench_enc_u64     ... bench:       411 ns/iter (+/- 84) = 19990 MB/s
-    test bench_enc_string  ... bench:     12039 ns/iter (+/- 3330) = 2893 MB/s
-    test bench_enc_vec_u_s ... bench:     12578 ns/iter (+/- 1665) = 3482 MB/s
+    test u64_enc        ... bench:         131 ns/iter (+/- 58) = 62717 MB/s
+    test string10_enc   ... bench:       8,784 ns/iter (+/- 2,791) = 3966 MB/s
+    test vec_u_s_enc    ... bench:       8,964 ns/iter (+/- 1,439) = 4886 MB/s
 
 They also repeatedly decode the same data, giving numbers like:
 
-    test bench_dec_u64     ... bench:       525 ns/iter (+/- 262) = 15649 MB/s
-    test bench_dec_string  ... bench:     11289 ns/iter (+/- 2432) = 3086 MB/s
-    test bench_dec_vec_u_s ... bench:     12557 ns/iter (+/- 2183) = 3488 MB/s
+    test u64_dec        ... bench:           2 ns/iter (+/- 1) = 4108000 MB/s
+    test string10_dec   ... bench:       1,058 ns/iter (+/- 349) = 32930 MB/s
+    test vec_u_s_dec    ... bench:       1,232 ns/iter (+/- 223) = 35551 MB/s
+
+These throughputs are so high because there is very little to do: internal pointers need to be corrected, but in their absence (*e.g.* `u64`) there is literally nothing to do.
 
 Be warned that these numbers are not *goodput*, but rather the total number of bytes moved, which is equal to the in-memory representation of the data. On a 64bit system, a `String` requires 24 bytes plus one byte per character, which can be a lot of overhead for small strings.
 
-## abomonate!
+## unsafe_abomonate!
 
-Abomonation comes with the `abomonate!` macro implementing `Abomonation` for structs which are essentially equivalent to a tuple of other `Abomonable` types. To use the macro, you must put the `#[macro_use]` modifier before `extern crate abomonation;`.
+Abomonation comes with the `unsafe_abomonate!` macro implementing `Abomonation` for structs which are essentially equivalent to a tuple of other `Abomonable` types. To use the macro, you must put the `#[macro_use]` modifier before `extern crate abomonation;`.
+
+Please note that `unsafe_abomonate!` synthesizes unsafe implementations of `Abomonation`, and it is should be considered unsafe to invoke.
 
 ```rust
 #[macro_use]
@@ -60,7 +66,7 @@ struct MyStruct {
 }
 
 // (type : field1, field2 .. )
-abomonate!(MyStruct : a, b, c);
+unsafe_abomonate!(MyStruct : a, b, c);
 
 // create some test data out of abomonation-approved types
 let record = MyStruct{ a: "test".to_owned(), b: 0, c: vec![0, 1, 2] };

@@ -1,12 +1,12 @@
 [package]
 name = "abomonation"
-version = "0.2.3"
+version = "0.3.0"
 authors = ["Frank McSherry <fmcsherry@me.com>"]
 
 description = "A high performance and very unsafe serialization library"
 
 # These URLs point to more information about the repository
-documentation = "https://github.com/frankmcsherry/abomonation"
+documentation = "https://frankmcsherry.github.com/abomonation"
 homepage = "https://github.com/frankmcsherry/abomonation"
 repository = "https://github.com/frankmcsherry/abomonation.git"
 keywords = ["abomonation"]
