@@ -5,7 +5,7 @@ Abomonation (spelling intentional) is a serialization library for Rust based on 
 
 **Warning**: Abomonation should not be used on any data you care strongly about, or from any computer you value the data on. The `encode` and `decode` methods do things that are currently undefined behavior, and you shouldn't stand for that.
 
-Please consult the [abomonation documentation]( "https://frankmcsherry.github.com/abomonation") for more specific information.
+Please consult the [abomonation documentation]("https://frankmcsherry.github.com/abomonation") for more specific information.
 
 Here is an example of using Abomonation. It is very easy to use. Frighteningly easy.
 
