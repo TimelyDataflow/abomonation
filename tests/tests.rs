@@ -65,5 +65,5 @@ fn test_multiple_encode_decode() {
     let (t, r) = decode::<u32>(&mut bytes).unwrap(); assert!(*t == 0);
     let (t, r) = decode::<u64>(r).unwrap(); assert!(*t == 7);
     let (t, r) = decode::<Vec<i32>>(r).unwrap(); assert!(*t == vec![1,2,3]);
-    let (t, r) = decode::<String>(r).unwrap(); assert!(*t == "grawwwwrr".to_owned());
+    let (t, _r) = decode::<String>(r).unwrap(); assert!(*t == "grawwwwrr".to_owned());
 }
