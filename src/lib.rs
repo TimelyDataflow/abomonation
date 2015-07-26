@@ -116,7 +116,38 @@ pub fn decode<T: Abomonation>(bytes: &mut [u8]) -> Result<(&T, &mut [u8]), &mut 
     }
 }
 
-
+/// Decodes a binary buffer into a reference to a typed element *without* validating the data .
+///
+/// `decode_unchecked` is meant to be used on buffers that have had `decode` called on them.
+/// Performance is not the main reason (`decode`) is generally very fast, but rather that
+/// the method can take a shared reference, without needing to mutate the underlying buffer.
+///
+/// #Examples
+/// ```
+/// use abomonation::{encode, decode, decode_unchecked};
+///
+/// // create some test data out of abomonation-approved types
+/// let vector = (0..256u64).map(|i| (i, format!("{}", i)))
+///                         .collect::<Vec<_>>();
+///
+/// // encode a Vec<(u64, String)> into a Vec<u8>
+/// let mut bytes = Vec::new();
+/// encode(&vector, &mut bytes);
+///
+/// // decode a &Vec<(u64, String)> from &mut [u8] binary data
+/// assert!(decode::<Vec<(u64, String)>>(&mut bytes).is_ok());
+///
+/// // remove mutability
+/// let bytes = bytes;
+/// unsafe {
+///     assert!(decode_unchecked::<Vec<(u64, String)>>(&bytes) == &vector);
+/// }
+/// ```
+#[inline]
+pub unsafe fn decode_unchecked<T: Abomonation>(bytes: &[u8]) -> &T {
+    // TODO : we could validate bytes, with additions to Abomonation
+    mem::transmute(bytes.get_unchecked(0))
+}
 
 /// Abomonation provides methods to serialize any heap data the implementor owns.
 ///
