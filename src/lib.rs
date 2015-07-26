@@ -200,7 +200,7 @@ pub trait Abomonation {
 }
 
 /// The `unsafe_abomonate!` macro takes a type name with an optional list of fields, and implements
-/// 'Abomonation' for the type, following the pattern of the tuple implementations: each method
+/// `Abomonation` for the type, following the pattern of the tuple implementations: each method
 /// calls the equivalent method on each of its fields.
 ///
 /// #Safety
