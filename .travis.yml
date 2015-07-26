@@ -1,18 +1,14 @@
 language: rust
-sudo: false
-
-# load travis-cargo
+sudo: required
+rust:
+  - stable
 before_script:
-  - git clone --depth 1 https://github.com/huonw/travis-cargo
-  # make a short alias (`alias` itself doesn't work)
-  - ln -s ./travis-cargo/travis-cargo.py tc
-
-# the main build
+  - pip install 'travis-cargo<0.2' --user && export PATH=$HOME/.local/bin:$PATH
 script:
-  - | ./tc cargo test &&
-      ./tc cargo doc
-
+  - |
+      travis-cargo build &&
+      travis-cargo test &&
+      travis-cargo bench &&
+      travis-cargo doc
 after_success:
-  # upload the documentation from the build with beta (automatically only actually
-  # runs on the master branch)
-  - ./tc doc-upload
+  - travis-cargo --only stable doc-upload
