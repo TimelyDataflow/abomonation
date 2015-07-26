@@ -21,7 +21,7 @@ let mut bytes = Vec::new();
 encode(&vector, &mut bytes);
 
 // decode a &Vec<(u64, String)> from binary data
-if let Ok((result, remaining) = decode::<Vec<(u64, String)>>(&mut bytes) {
+if let Some((result, remaining) = decode::<Vec<(u64, String)>>(&mut bytes) {
     assert!(result == &vector);
     assert!(remaining.len() == 0);
 }
@@ -76,7 +76,7 @@ let mut bytes = Vec::new();
 encode(&record, &mut bytes);
 
 // decode a &Vec<(u64, String)> from binary data
-if let Ok((result, remaining)) = decode::<MyStruct>(&mut bytes) {
+if let Some((result, remaining)) = decode::<MyStruct>(&mut bytes) {
     assert!(result == &record);
     assert!(remaining.len() == 0);
 }
