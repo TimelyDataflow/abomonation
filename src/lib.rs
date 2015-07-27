@@ -9,7 +9,8 @@
 //!
 //! Abomonation does several unsafe things, and should ideally be used only through the methods
 //! `encode` and `decode` on types implementing the `Abomonation` trait. Implementing the
-//! `Abomonation` trait is highly discouraged, unless you use the `abomonate!` macro
+//! `Abomonation` trait is highly discouraged, unless you use the `unsafe_abomonate!` macro, which
+//! is only mostly discouraged.
 //!
 //! **Very important**: Abomonation reproduces the memory as laid out by the serializer, which can
 //! reveal architectural variations. Data encoded on a 32bit big-endian machine will not decode
