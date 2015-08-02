@@ -267,11 +267,13 @@ impl Abomonation for u8 { }
 impl Abomonation for u16 { }
 impl Abomonation for u32 { }
 impl Abomonation for u64 { }
+impl Abomonation for usize { }
 
 impl Abomonation for i8 { }
 impl Abomonation for i16 { }
 impl Abomonation for i32 { }
 impl Abomonation for i64 { }
+impl Abomonation for isize { }
 
 impl Abomonation for f32 { }
 impl Abomonation for f64 { }
