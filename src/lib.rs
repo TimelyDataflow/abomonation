@@ -357,6 +357,27 @@ impl<T1: Abomonation, T2: Abomonation, T3: Abomonation, T4: Abomonation> Abomona
     }
 }
 
+impl<T1: Abomonation, T2: Abomonation, T3: Abomonation, T4: Abomonation, T5: Abomonation> Abomonation for (T1, T2, T3, T4, T5) {
+    #[inline] unsafe fn embalm(&mut self) { self.0.embalm(); self.1.embalm(); self.2.embalm(); self.3.embalm(); self.4.embalm(); }
+    #[inline] unsafe fn entomb(&self, bytes: &mut Vec<u8>) { self.0.entomb(bytes); self.1.entomb(bytes); self.2.entomb(bytes); self.3.entomb(bytes); self.4.entomb(bytes); }
+    #[inline] unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+        let tmp = bytes; bytes = try_option!(self.0.exhume(tmp));
+        let tmp = bytes; bytes = try_option!(self.1.exhume(tmp));
+        let tmp = bytes; bytes = try_option!(self.2.exhume(tmp));
+        let tmp = bytes; bytes = try_option!(self.3.exhume(tmp));
+        let tmp = bytes; bytes = try_option!(self.4.exhume(tmp));
+        Some(bytes)
+    }
+    #[inline] fn verify<'a,'b>(&'a self, mut bytes: &'b [u8]) -> Option<&'b [u8]> {
+        let tmp = bytes; bytes = try_option!(self.0.verify(tmp));
+        let tmp = bytes; bytes = try_option!(self.1.verify(tmp));
+        let tmp = bytes; bytes = try_option!(self.2.verify(tmp));
+        let tmp = bytes; bytes = try_option!(self.3.verify(tmp));
+        let tmp = bytes; bytes = try_option!(self.4.verify(tmp));
+        Some(bytes)
+    }
+}
+
 impl Abomonation for String {
     #[inline]
     unsafe fn embalm(&mut self) {
