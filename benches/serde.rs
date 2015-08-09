@@ -35,7 +35,7 @@ fn bench_deserialize(b: &mut Bencher) {
     b.bytes = bytes.len() as u64;
 
     b.iter(|| {
-        decode::<Log>(&mut bytes).is_some()
+        test::black_box(decode::<Log>(&mut bytes));
     });
 }
 
