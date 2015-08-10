@@ -17,9 +17,8 @@ fn bench_populate(b: &mut Bencher) {
 fn bench_serialize(b: &mut Bencher) {
     let log = Log::new();
     let mut bytes = vec![];
-    encode(&log, &mut bytes);
+    unsafe { encode(&log, &mut bytes); }
     b.bytes = bytes.len() as u64;
-
     b.iter(|| {
         bytes.clear();
         encode(&log, &mut bytes);
@@ -31,11 +30,10 @@ fn bench_serialize(b: &mut Bencher) {
 fn bench_deserialize(b: &mut Bencher) {
     let log = Log::new();
     let mut bytes = vec![];
-    encode(&log, &mut bytes);
+    unsafe { encode(&log, &mut bytes); }
     b.bytes = bytes.len() as u64;
-
     b.iter(|| {
-        test::black_box(decode::<Log>(&mut bytes));
+        test::black_box(unsafe { decode::<Log>(&mut bytes) });
     });
 }
 
@@ -43,11 +41,10 @@ fn bench_deserialize(b: &mut Bencher) {
 fn bench_deserialize_assert(b: &mut Bencher) {
     let log = Log::new();
     let mut bytes = vec![];
-    encode(&log, &mut bytes);
+    unsafe { encode(&log, &mut bytes); }
     b.bytes = bytes.len() as u64;
-
     b.iter(|| {
-        assert!(decode::<Log>(&mut bytes).unwrap().0 == &log);
+        assert!(unsafe { decode::<Log>(&mut bytes) }.unwrap().0 == &log);
     });
 }
 
@@ -76,6 +73,7 @@ pub enum HttpProtocol {
     HTTP11,
 }
 
+#[allow(non_camel_case_types)]
 #[derive(Eq, PartialEq)]
 pub enum HttpMethod {
     METHOD_UNKNOWN,
@@ -91,6 +89,7 @@ pub enum HttpMethod {
     PATCH,
 }
 
+#[allow(non_camel_case_types)]
 #[derive(Eq, PartialEq)]
 pub enum CacheStatus {
     CACHESTATUS_UNKNOWN,
@@ -107,6 +106,7 @@ pub struct Origin {
     protocol: OriginProtocol,
 }
 
+#[allow(non_camel_case_types)]
 #[derive(Eq, PartialEq)]
 pub enum OriginProtocol {
     ORIGIN_PROTOCOL_UNKNOWN,
@@ -114,6 +114,7 @@ pub enum OriginProtocol {
     HTTPS,
 }
 
+#[allow(non_camel_case_types)]
 #[derive(Eq, PartialEq)]
 pub enum ZonePlan {
     ZONEPLAN_UNKNOWN,

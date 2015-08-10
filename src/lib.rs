@@ -28,10 +28,10 @@
 //!
 //! // encode a Vec<(u64, String)> into a Vec<u8>
 //! let mut bytes = Vec::new();
-//! encode(&vector, &mut bytes);
+//! unsafe { encode(&vector, &mut bytes); }
 //!
 //! // decode a &Vec<(u64, String)> from &mut [u8] binary data
-//! if let Some((result, remaining)) = decode::<Vec<(u64, String)>>(&mut bytes) {
+//! if let Some((result, remaining)) = unsafe { decode::<Vec<(u64, String)>>(&mut bytes) } {
 //!     assert!(result == &vector);
 //!     assert!(remaining.len() == 0);
 //! }
@@ -66,25 +66,23 @@ macro_rules! try_option {
 ///
 /// // encode a Vec<(u64, String)> into a Vec<u8>
 /// let mut bytes = Vec::new();
-/// encode(&vector, &mut bytes);
+/// unsafe { encode(&vector, &mut bytes); }
 ///
 /// // decode a &Vec<(u64, String)> from &mut [u8] binary data
-/// if let Some((result, remaining)) = decode::<Vec<(u64, String)>>(&mut bytes) {
+/// if let Some((result, remaining)) = unsafe { decode::<Vec<(u64, String)>>(&mut bytes) } {
 ///     assert!(result == &vector);
 ///     assert!(remaining.len() == 0);
 /// }
 /// ```
 ///
 #[inline]
-pub fn encode<T: Abomonation>(typed: &T, bytes: &mut Vec<u8>) {
-    unsafe {
-        let start = bytes.len();            // may not be empty!
-        let slice = std::slice::from_raw_parts(mem::transmute(typed), mem::size_of::<T>());
-        bytes.write_all(slice).unwrap();    // Rust claims a write to a Vec<u8> will never fail.
-        let result: &mut T = mem::transmute(bytes.as_mut_ptr().offset(start as isize));
-        result.embalm();
-        typed.entomb(bytes);
-    }
+pub unsafe fn encode<T: Abomonation>(typed: &T, bytes: &mut Vec<u8>) {
+    let start = bytes.len();            // may not be empty!
+    let slice = std::slice::from_raw_parts(mem::transmute(typed), mem::size_of::<T>());
+    bytes.write_all(slice).unwrap();    // Rust claims a write to a Vec<u8> will never fail.
+    let result: &mut T = mem::transmute(bytes.as_mut_ptr().offset(start as isize));
+    result.embalm();
+    typed.entomb(bytes);
 }
 
 /// Decodes a mutable binary slice into an immutable typed reference.
@@ -93,6 +91,14 @@ pub fn encode<T: Abomonation>(typed: &T, bytes: &mut Vec<u8>) {
 /// element, offering it the ability to consume prefixes of `bytes` to back any owned data.
 /// The return value is either a pair of the typed reference `&T` and the remaining `&mut [u8]`
 /// binary data, or `None` if decoding failed due to lack of data.
+///
+/// #Safety
+///
+/// `decode` is unsafe due to a number of unchecked invariants. Decoding arbitrary `&[u8]` data can
+/// result in invalid utf8 strings, enums with invalid discriminants, etc. `decode` does presently
+/// perform bounds checks, as part of determining if enough data are present to completely decode,
+/// and while it should only write to its `&mut [u8]` argument, invalid utf8 and enums are undefined
+/// behavior. Please do not decode data that was not encoded by the corresponding implementation.
 ///
 /// #Examples
 /// ```
@@ -104,62 +110,27 @@ pub fn encode<T: Abomonation>(typed: &T, bytes: &mut Vec<u8>) {
 ///
 /// // encode a Vec<(u64, String)> into a Vec<u8>
 /// let mut bytes = Vec::new();
-/// encode(&vector, &mut bytes);
+/// unsafe { encode(&vector, &mut bytes); }
 ///
 /// // decode a &Vec<(u64, String)> from &mut [u8] binary data
-/// if let Some((result, remaining)) = decode::<Vec<(u64, String)>>(&mut bytes) {
+/// if let Some((result, remaining)) = unsafe { decode::<Vec<(u64, String)>>(&mut bytes) } {
 ///     assert!(result == &vector);
 ///     assert!(remaining.len() == 0);
 /// }
 /// ```
 #[inline]
-pub fn decode<T: Abomonation>(bytes: &mut [u8]) -> Option<(&T, &mut [u8])> {
+pub unsafe fn decode<T: Abomonation>(bytes: &mut [u8]) -> Option<(&T, &mut [u8])> {
     if bytes.len() < mem::size_of::<T>() { None }
     else {
         let (split1, split2) = bytes.split_at_mut(mem::size_of::<T>());
-        let result: &mut T = unsafe { mem::transmute(split1.get_unchecked_mut(0)) };
-        if let Some(remaining) = unsafe { result.exhume(split2) } {
+        let result: &mut T = mem::transmute(split1.get_unchecked_mut(0));
+        if let Some(remaining) = result.exhume(split2) {
             Some((result, remaining))
         }
         else {
             None
         }
     }
-}
-
-/// Decodes an immutable binary slice into an immutable typed reference by validating the data .
-///
-/// `verify` is meant to be used on buffers that have already had `decode` called on them.
-/// Unline `decode`, `verify` can take a shared reference, as it does not attempt to mutate the
-/// underlying buffer. The return value is either a pair of the typed reference `&T` and the
-/// remaining `&[u8]` binary data, or `None` if decoding failed due to lack of data.
-///
-/// #Examples
-/// ```
-/// use abomonation::{encode, decode, verify};
-///
-/// // create some test data out of abomonation-approved types
-/// let vector = (0..256u64).map(|i| (i, format!("{}", i)))
-///                         .collect::<Vec<_>>();
-///
-/// // encode a Vec<(u64, String)> into a Vec<u8>
-/// let mut bytes = Vec::new();
-/// encode(&vector, &mut bytes);
-///
-/// // decode a &Vec<(u64, String)> from &mut [u8] binary data
-/// assert!(decode::<Vec<(u64, String)>>(&mut bytes).is_some());
-///
-/// // remove mutability
-/// let bytes = bytes;
-/// if let Some((result, remaining)) = verify::<Vec<(u64, String)>>(&bytes) {
-///     assert!(result == &vector);
-///     assert!(remaining.len() == 0);
-/// }
-/// ```
-#[inline]
-pub fn verify<T: Abomonation>(bytes: &[u8]) -> Option<(&T,&[u8])> {
-    let result: &T = unsafe { mem::transmute(bytes.get_unchecked(0)) };
-    result.verify(&bytes[mem::size_of::<T>()..]).map(|x| (result, x))
 }
 
 /// Abomonation provides methods to serialize any heap data the implementor owns.
@@ -192,12 +163,6 @@ pub trait Abomonation {
     ///
     /// Most commonly this populates pointers with valid references into `bytes`.
     #[inline] unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> { Some(bytes) }
-
-    /// Confirm that `bytes` decodes to a valid reference without correcting self if it does not.
-    ///
-    /// Most commonly this is used to data that have been exhumed, as a way to get a typed
-    /// reference without requiring a `&mut [u8]` reference.
-    #[inline] fn verify<'a,'b>(&'a self, bytes: &'b [u8]) -> Option<&'b [u8]> { Some(bytes) }
 }
 
 /// The `unsafe_abomonate!` macro takes a type name with an optional list of fields, and implements
@@ -230,10 +195,10 @@ pub trait Abomonation {
 ///
 ///     // encode a &MyStruct into a Vec<u8>
 ///     let mut bytes = Vec::new();
-///     encode(&my_struct, &mut bytes);
+///     unsafe { encode(&my_struct, &mut bytes); }
 ///
 ///     // decode a &MyStruct from &mut [u8] binary data
-///     if let Some((result, remaining)) = decode::<MyStruct>(&mut bytes) {
+///     if let Some((result, remaining)) = unsafe { decode::<MyStruct>(&mut bytes) } {
 ///         assert!(result == &my_struct);
 ///         assert!(remaining.len() == 0);
 ///     }
@@ -254,10 +219,6 @@ macro_rules! unsafe_abomonate {
                 $( let temp = bytes; bytes = if let Some(bytes) = self.$field.exhume(temp) { bytes} else { return None }; )*
                 Some(bytes)
             }
-            #[inline] fn verify<'a,'b>(&'a self, mut bytes: &'b [u8]) -> Option<&'b [u8]> {
-                $( let temp = bytes; bytes = if let Some(bytes) = self.$field.verify(temp) { bytes} else { return None }; )*
-                Some(bytes)
-            }
         }
     };
     ($($name:ident),+ ; $t: ty : $($field:ident),*) => {
@@ -270,10 +231,6 @@ macro_rules! unsafe_abomonate {
             }
             #[inline] unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
                 $( let temp = bytes; bytes = if let Some(bytes) = self.$field.exhume(temp) { bytes} else { return None }; )*
-                Some(bytes)
-            }
-            #[inline] fn verify<'a,'b>(&'a self, mut bytes: &'b [u8]) -> Option<&'b [u8]> {
-                $( let temp = bytes; bytes = if let Some(bytes) = self.$field.verify(temp) { bytes} else { return None }; )*
                 Some(bytes)
             }
         }
@@ -298,12 +255,6 @@ macro_rules! tuple_abomonate {
             #[inline] unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
                 let ($(ref mut $name,)*) = *self;
                 $( let temp = bytes; bytes = if let Some(bytes) = $name.exhume(temp) { bytes} else { return None }; )*
-                Some(bytes)
-            }
-            #[allow(non_snake_case)]
-            #[inline] fn verify<'a,'b>(&'a self, mut bytes: &'b [u8]) -> Option<&'b [u8]> {
-                let ($(ref $name,)*) = *self;
-                $( let temp = bytes; bytes = if let Some(bytes) = $name.verify(temp) { bytes} else { return None }; )*
                 Some(bytes)
             }
         }
@@ -346,12 +297,6 @@ impl<T: Abomonation> Abomonation for Option<T> {
         }
         Some(bytes)
     }
-    #[inline] fn verify<'a, 'b>(&'a self, mut bytes: &'b [u8]) -> Option<&'b [u8]> {
-        if let &Some(ref inner) = self {
-            let tmp = bytes; bytes = try_option!(inner.verify(tmp));
-        }
-        Some(bytes)
-    }
 }
 
 tuple_abomonate!(A);
@@ -383,14 +328,24 @@ impl Abomonation for String {
             Some(rest)
         }
     }
+}
+
+impl<'c> Abomonation for &'c str {
     #[inline]
-    fn verify<'a,'b>(&'a self, bytes: &'b [u8]) -> Option<&'b [u8]> {
-        // std::ptr::write(self, String::from_raw_parts(mem::transmute(mine.as_ptr()), self.len(), self.len()));
-        if self.len() <= bytes.len() && self.as_bytes().as_ptr() == bytes.as_ptr()  {
-            return Some(&bytes[self.len()..])
-        }
+    unsafe fn embalm(&mut self) {
+        *self = std::str::from_utf8_unchecked(std::slice::from_raw_parts(EMPTY as *mut u8, self.len()));
+    }
+    #[inline]
+    unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
+        bytes.write_all(self.as_bytes()).unwrap();
+    }
+    #[inline]
+    unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+        if self.len() > bytes.len() { None }
         else {
-            None
+            let (mine, mut rest) = bytes.split_at_mut(self.len());
+            *self = std::str::from_utf8_unchecked(std::slice::from_raw_parts_mut(mine.as_mut_ptr() as *mut u8, self.len()));
+            Some(rest)
         }
     }
 }
@@ -420,22 +375,6 @@ impl<T: Abomonation> Abomonation for Vec<T> {
             for element in self.iter_mut() {
                 let temp = rest;             // temp variable explains lifetimes (mysterious!)
                 rest = try_option!(element.exhume(temp));
-            }
-            Some(rest)
-        }
-    }
-    #[inline]
-    fn verify<'a,'b>(&'a self, bytes: &'b [u8]) -> Option<&'b [u8]> {
-
-        // extract memory from bytes to back our vector
-        let binary_len = self.len() * mem::size_of::<T>();
-        if binary_len > bytes.len() { None }
-        else {
-            let mut rest = &bytes[binary_len..];
-            if unsafe { mem::transmute::<*const T,*const u8>((&self[..]).as_ptr()) } != bytes.as_ptr() { return None }
-            for element in self.iter() {
-                let temp = rest;             // temp variable explains lifetimes (mysterious!)
-                rest = try_option!(element.verify(temp));
             }
             Some(rest)
         }
@@ -471,23 +410,6 @@ impl<'c, T: Abomonation> Abomonation for &'c [T] {
             Some(rest)
         }
     }
-    #[inline]
-    fn verify<'a,'b>(&'a self, bytes: &'b [u8]) -> Option<&'b [u8]> {
-
-        // extract memory from bytes to back our slice
-        let binary_len = self.len() * mem::size_of::<T>();
-        if binary_len > bytes.len() { None }
-        else {
-            let mut rest = &bytes[binary_len..];
-            // if self.as_ptr() != bytes.as_ptr() { return None }
-            if unsafe { mem::transmute::<*const T,*const u8>((&self[..]).as_ptr()) } != bytes.as_ptr() { return None }
-            for element in self.iter() {
-                let temp = rest;
-                rest = try_option!(element.verify(temp));
-            }
-            Some(rest)
-        }
-    }
 }
 
 impl<T: Abomonation> Abomonation for Box<T> {
@@ -510,18 +432,6 @@ impl<T: Abomonation> Abomonation for Box<T> {
             let (mine, mut rest) = bytes.split_at_mut(binary_len);
             std::ptr::write(self, mem::transmute(mine.as_mut_ptr() as *mut T));
             let temp = rest; rest = try_option!((**self).exhume(temp));
-            Some(rest)
-        }
-    }
-    #[inline]
-    fn verify<'a,'b>(&'a self, bytes: &'b [u8]) -> Option<&'b [u8]> {
-        let binary_len = mem::size_of::<T>();
-        if binary_len > bytes.len() { None }
-        else {
-            let mut rest = &bytes[binary_len..];
-            if unsafe { mem::transmute::<*const T,*const u8>(&**self) } != bytes.as_ptr() { return None }
-            // if self.as_ptr() != bytes.as_ptr() { return None }
-            let temp = rest; rest = try_option!((**self).verify(temp));
             Some(rest)
         }
     }

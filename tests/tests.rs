@@ -2,6 +2,7 @@
 extern crate abomonation;
 use abomonation::*;
 
+#[test] fn test_str_ref() { _test_pass(vec!["hi there"; 245]); }
 #[test] fn test_alignment() { _test_pass(vec![(format!("x"), vec![1,2,3]); 1024]); }
 #[test] fn test_option_box_u64() { _test_pass(vec![Some(Box::new(0u64))]); }
 #[test] fn test_option_vec() { _test_pass(vec![Some(vec![0, 1, 2])]); }
@@ -16,22 +17,19 @@ use abomonation::*;
 
 fn _test_pass<T: Abomonation+Eq>(record: T) {
     let mut bytes = Vec::new();
-    encode(&record, &mut bytes);
+    unsafe { encode(&record, &mut bytes); }
     {
-        let (result, rest) = decode::<T>(&mut bytes[..]).unwrap();
+        let (result, rest) = unsafe { decode::<T>(&mut bytes[..]) }.unwrap();
         assert!(&record == result);
         assert!(rest.len() == 0);
     }
-    assert!(verify::<T>(&bytes[..]).is_some());
 }
 
 fn _test_fail<T: Abomonation>(record: T) {
     let mut bytes = Vec::new();
-    encode(&record, &mut bytes);
+    unsafe { encode(&record, &mut bytes); }
     bytes.pop();
-    assert!(verify::<T>(&bytes[..]).is_none());
-    assert!(decode::<T>(&mut bytes[..]).is_none());
-    assert!(verify::<T>(&bytes[..]).is_none());
+    assert!(unsafe { decode::<T>(&mut bytes[..]) }.is_none());
 }
 
 #[derive(Eq, PartialEq)]
@@ -50,10 +48,10 @@ fn test_macro() {
 
     // encode vector into a Vec<u8>
     let mut bytes = Vec::new();
-    encode(&record, &mut bytes);
+    unsafe { encode(&record, &mut bytes); }
 
     // decode a &Vec<(u64, String)> from binary data
-    if let Some((result, rest)) = decode::<MyStruct>(&mut bytes) {
+    if let Some((result, rest)) = unsafe { decode::<MyStruct>(&mut bytes) } {
         assert!(result == &record);
         assert!(rest.len() == 0);
     }
@@ -62,13 +60,13 @@ fn test_macro() {
 #[test]
 fn test_multiple_encode_decode() {
     let mut bytes = Vec::new();
-    encode(&0u32, &mut bytes);
-    encode(&7u64, &mut bytes);
-    encode(&vec![1,2,3], &mut bytes);
-    encode(&"grawwwwrr".to_owned(), &mut bytes);
+    unsafe { encode(&0u32, &mut bytes); }
+    unsafe { encode(&7u64, &mut bytes); }
+    unsafe { encode(&vec![1,2,3], &mut bytes); }
+    unsafe { encode(&"grawwwwrr".to_owned(), &mut bytes); }
 
-    let (t, r) = decode::<u32>(&mut bytes).unwrap(); assert!(*t == 0);
-    let (t, r) = decode::<u64>(r).unwrap(); assert!(*t == 7);
-    let (t, r) = decode::<Vec<i32>>(r).unwrap(); assert!(*t == vec![1,2,3]);
-    let (t, _r) = decode::<String>(r).unwrap(); assert!(*t == "grawwwwrr".to_owned());
+    let (t, r) = unsafe { decode::<u32>(&mut bytes) }.unwrap(); assert!(*t == 0);
+    let (t, r) = unsafe { decode::<u64>(r) }.unwrap(); assert!(*t == 7);
+    let (t, r) = unsafe { decode::<Vec<i32>>(r) }.unwrap(); assert!(*t == vec![1,2,3]);
+    let (t, _r) = unsafe { decode::<String>(r) }.unwrap(); assert!(*t == "grawwwwrr".to_owned());
 }

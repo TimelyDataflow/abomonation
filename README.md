@@ -3,7 +3,7 @@ A mortifying serialization library for Rust
 
 Abomonation (spelling intentional) is a serialization library for Rust based on the very simple idea that if someone presents data for serialization it will copy those exact bits, and then follow any pointers and copy those bits, and so on. When deserializing it recovers the exact bits, and then corrects pointers to aim at the serialized forms of the chased data.
 
-**Warning**: Abomonation should not be used on any data you care strongly about, or from any computer you value the data on. The `encode` and `decode` methods do things that are currently undefined behavior, and you shouldn't stand for that.
+**Warning**: Abomonation should not be used on any data you care strongly about, or from any computer you value the data on. The `encode` and `decode` methods do things that may be undefined behavior, and you shouldn't stand for that. Specifically, `encode` exposes padding bytes to `memcpy`, and `decode` doesn't much respect alignment.
 
 Please consult the [abomonation documentation](https://frankmcsherry.github.com/abomonation) for more specific information.
 
@@ -18,10 +18,10 @@ let vector = (0..256u64).map(|i| (i, format!("{}", i))).collect();
 
 // encode vector into a Vec<u8>
 let mut bytes = Vec::new();
-encode(&vector, &mut bytes);
+unsafe { encode(&vector, &mut bytes); }
 
-// decode a &Vec<(u64, String)> from binary data
-if let Some((result, remaining) = decode::<Vec<(u64, String)>>(&mut bytes) {
+// unsafely decode a &Vec<(u64, String)> from binary data (maybe your utf8 are lies!).
+if let Some((result, remaining) = unsafe { decode::<Vec<(u64, String)>>(&mut bytes) } {
     assert!(result == &vector);
     assert!(remaining.len() == 0);
 }
@@ -76,7 +76,7 @@ let mut bytes = Vec::new();
 encode(&record, &mut bytes);
 
 // decode a &Vec<(u64, String)> from binary data
-if let Some((result, remaining)) = decode::<MyStruct>(&mut bytes) {
+if let Some((result, remaining)) = unsafe { decode::<MyStruct>(&mut bytes) } {
     assert!(result == &record);
     assert!(remaining.len() == 0);
 }
