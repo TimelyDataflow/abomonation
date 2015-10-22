@@ -1,6 +1,6 @@
 [package]
 name = "abomonation"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["Frank McSherry <fmcsherry@me.com>"]
 
 description = "A high performance and very unsafe serialization library"
@@ -12,5 +12,5 @@ repository = "https://github.com/frankmcsherry/abomonation.git"
 keywords = ["abomonation"]
 license = "MIT"
 
-[dev-dependencies.recycler]
-git="http://github.com/frankmcsherry/recycler"
+[dev-dependencies]
+recycler="*"

@@ -73,7 +73,7 @@ let record = MyStruct{ a: "test".to_owned(), b: 0, c: vec![0, 1, 2] };
 
 // encode vector into a Vec<u8>
 let mut bytes = Vec::new();
-encode(&record, &mut bytes);
+unsafe { encode(&record, &mut bytes); }
 
 // decode a &Vec<(u64, String)> from binary data
 if let Some((result, remaining)) = unsafe { decode::<MyStruct>(&mut bytes) } {
