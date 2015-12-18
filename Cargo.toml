@@ -1,6 +1,6 @@
 [package]
 name = "abomonation"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Frank McSherry <fmcsherry@me.com>"]
 
 description = "A high performance and very unsafe serialization library"

@@ -278,7 +278,9 @@ impl Abomonation for f32 { }
 impl Abomonation for f64 { }
 
 impl Abomonation for bool { }
-impl Abomonation for () {}
+impl Abomonation for () { }
+
+impl Abomonation for char { }
 
 impl<T: Abomonation> Abomonation for Option<T> {
     #[inline] unsafe fn embalm(&mut self) {
