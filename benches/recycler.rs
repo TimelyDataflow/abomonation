@@ -31,7 +31,7 @@ fn _bench_own<T: Abomonation+Clone>(bencher: &mut Bencher, record: T) {
 
     // prepare encoded data
     let mut bytes = Vec::new();
-    encode(&record, &mut bytes);
+    unsafe { encode(&record, &mut bytes); }
 
     // repeatedly decode (and validate)
     bencher.bytes = bytes.len() as u64;
@@ -46,7 +46,7 @@ fn _bench_rec<T: Abomonation+Recyclable>(bencher: &mut Bencher, record: T) {
 
     // prepare encoded data
     let mut bytes = Vec::new();
-    encode(&record, &mut bytes);
+    unsafe { encode(&record, &mut bytes); }
     let mut recycler = make_recycler::<T>();
     recycler.recycle(record);
 
