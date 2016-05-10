@@ -21,7 +21,7 @@ fn bench_serialize(b: &mut Bencher) {
     b.bytes = bytes.len() as u64;
     b.iter(|| {
         bytes.clear();
-        encode(&log, &mut bytes);
+        unsafe { encode(&log, &mut bytes); }
         test::black_box(&bytes);
     });
 }
@@ -412,24 +412,24 @@ impl Log {
                 host_status: 503,
                 up_status: 520,
                 method: HttpMethod::GET,
-                content_type: "text/html".to_string(),
+                content_type: "text/html".to_owned(),
                 user_agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.146 Safari/537.36".to_string(),
-                referer: "https://www.cloudflare.com/".to_string(),
-                request_uri: "/cdn-cgi/trace".to_string(),
+                referer: "https://www.cloudflare.com/".to_owned(),
+                request_uri: "/cdn-cgi/trace".to_owned(),
             },
             origin: Origin {
-                ip: "1.2.3.4".to_string(),
+                ip: "1.2.3.4".to_owned(),
                 port: 8000,
-                hostname: "www.example.com".to_string(),
+                hostname: "www.example.com".to_owned(),
                 protocol: OriginProtocol::HTTPS,
             },
             country: Country::US,
             cache_status: CacheStatus::Hit,
-            server_ip: "192.168.1.1".to_string(),
-            server_name: "metal.cloudflare.com".to_string(),
-            remote_ip: "10.1.2.3".to_string(),
+            server_ip: "192.168.1.1".to_owned(),
+            server_name: "metal.cloudflare.com".to_owned(),
+            remote_ip: "10.1.2.3".to_owned(),
             bytes_dlv: 123456,
-            ray_id: "10c73629cce30078-LAX".to_string(),
+            ray_id: "10c73629cce30078-LAX".to_owned(),
         }
     }
 }
