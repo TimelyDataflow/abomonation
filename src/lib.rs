@@ -319,7 +319,19 @@ impl Abomonation for String {
     }
     #[inline]
     unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
-        bytes.write_all(self.as_bytes()).unwrap();
+
+        // TODO : At the moment, this does not compile to a memcpy, 
+        // due to Rust working around LLVM soundness bugs.
+
+        // bytes.write_all(self.as_bytes()).unwrap();
+
+        // TODO : Instead, we use the following hunk of code:
+        let position = bytes.len();
+        bytes.reserve(self.as_bytes().len());
+        ::std::ptr::copy_nonoverlapping(self.as_bytes().as_ptr(), bytes.as_mut_ptr().offset(position as isize), self.as_bytes().len());
+        bytes.set_len(position + self.as_bytes().len());
+        // TODO : End hunk of replacement code
+
     }
     #[inline]
     unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
@@ -339,7 +351,19 @@ impl<'c> Abomonation for &'c str {
     }
     #[inline]
     unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
-        bytes.write_all(self.as_bytes()).unwrap();
+
+        // TODO : At the moment, this does not compile to a memcpy, 
+        // due to Rust working around LLVM soundness bugs.
+
+        // bytes.write_all(self.as_bytes()).unwrap();
+
+        // TODO : Instead, we use the following hunk of code:
+        let position = bytes.len();
+        bytes.reserve(self.as_bytes().len());
+        ::std::ptr::copy_nonoverlapping(self.as_bytes().as_ptr(), bytes.as_mut_ptr().offset(position as isize), self.as_bytes().len());
+        bytes.set_len(position + self.as_bytes().len());
+        // TODO : End hunk of replacement code
+
     }
     #[inline]
     unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
@@ -360,7 +384,19 @@ impl<T: Abomonation> Abomonation for Vec<T> {
     #[inline]
     unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
         let position = bytes.len();
-        bytes.write_all(typed_to_bytes(&self[..])).unwrap();
+
+        // TODO : At the moment, this does not compile to a memcpy, 
+        // due to Rust working around LLVM soundness bugs.
+
+        // bytes.write_all(typed_to_bytes(&self[..])).unwrap();
+
+        // TODO : Instead, we use the following hunk of code:
+        let typed_bytes = typed_to_bytes(&self[..]);
+        bytes.reserve(typed_bytes.len());
+        ::std::ptr::copy_nonoverlapping(typed_bytes.as_ptr(), bytes.as_mut_ptr().offset(position as isize), typed_bytes.len());
+        bytes.set_len(position + typed_bytes.len());
+        // TODO : End hunk of replacement code
+
         for element in bytes_to_typed::<T>(&mut bytes[position..], self.len()) { element.embalm(); }
         for element in self.iter() { element.entomb(bytes); }
     }
@@ -391,7 +427,19 @@ impl<'c, T: Abomonation> Abomonation for &'c [T] {
     #[inline]
     unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
         let position = bytes.len();
-        bytes.write_all(typed_to_bytes(self)).unwrap();
+
+        // TODO : At the moment, this does not compile to a memcpy, 
+        // due to Rust working around LLVM soundness bugs.
+
+        // bytes.write_all(typed_to_bytes(self)).unwrap();
+
+        // TODO : Instead, we use the following hunk of code:
+        let typed_bytes = typed_to_bytes(&self[..]);
+        bytes.reserve(typed_bytes.len());
+        ::std::ptr::copy_nonoverlapping(typed_bytes.as_ptr(), bytes.as_mut_ptr().offset(position as isize), typed_bytes.len());
+        bytes.set_len(position + typed_bytes.len());
+        // TODO : End hunk of replacement code
+        
         for element in bytes_to_typed::<T>(&mut bytes[position..], self.len()) { element.embalm(); }
         for element in self.iter() { element.entomb(bytes); }
     }
