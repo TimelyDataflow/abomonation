@@ -13,4 +13,4 @@ keywords = ["abomonation"]
 license = "MIT"
 
 [dev-dependencies]
-recycler="*"
+recycler="0.1.4"
