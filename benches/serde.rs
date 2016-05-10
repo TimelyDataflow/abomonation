@@ -413,7 +413,7 @@ impl Log {
                 up_status: 520,
                 method: HttpMethod::GET,
                 content_type: "text/html".to_owned(),
-                user_agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.146 Safari/537.36".to_string(),
+                user_agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.146 Safari/537.36".to_owned(),
                 referer: "https://www.cloudflare.com/".to_owned(),
                 request_uri: "/cdn-cgi/trace".to_owned(),
             },
