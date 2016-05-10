@@ -7,6 +7,7 @@ use abomonation::*;
 use test::Bencher;
 use std::io::Read;
 
+
 #[bench] fn empty_enc(bencher: &mut Bencher) { _bench_enc(bencher, vec![(); 1024]); }
 #[bench] fn empty_dec(bencher: &mut Bencher) { _bench_dec(bencher, vec![(); 1024]); }
 
@@ -38,7 +39,7 @@ fn _bench_enc<T: Abomonation>(bencher: &mut Bencher, record: T) {
     bencher.bytes = bytes.len() as u64;
     bencher.iter(|| {
         bytes.clear();
-        encode(&record, &mut bytes);
+        unsafe { encode(&record, &mut bytes) }
     });
 }
 
