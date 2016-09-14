@@ -2,6 +2,7 @@
 extern crate abomonation;
 use abomonation::*;
 
+#[test] fn test_array() { _test_pass(vec![[0, 1, 2]; 1024]); }
 #[test] fn test_opt_vec() { _test_pass(vec![Some(vec![0,1,2]), None]); }
 #[test] fn test_str_ref() { _test_pass(vec!["hi there"; 245]); }
 #[test] fn test_alignment() { _test_pass(vec![(format!("x"), vec![1,2,3]); 1024]); }

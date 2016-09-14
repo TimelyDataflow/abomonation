@@ -273,7 +273,6 @@ macro_rules! tuple_abomonate {
     );
 }
 
-
 impl Abomonation for u8 { }
 impl Abomonation for u16 { }
 impl Abomonation for u32 { }
@@ -323,6 +322,34 @@ tuple_abomonate!(A B C D E F G);
 tuple_abomonate!(A B C D E F G H);
 tuple_abomonate!(A B C D E F G H I);
 tuple_abomonate!(A B C D E F G H I J);
+
+macro_rules! array_abomonate {
+    ($size:expr) => (
+        impl<T: Abomonation> Abomonation for [T; $size] {
+            #[inline] 
+            unsafe fn embalm(&mut self) {
+                for element in self { element.embalm(); }
+            }
+            #[inline]
+            unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
+                for element in self { element.entomb(bytes); }
+            }
+            #[inline]
+            unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
+                for element in self { 
+                    let tmp = bytes; bytes = try_option!(element.exhume(tmp));
+                }
+                Some(bytes)
+            }
+        }
+    )
+}
+
+array_abomonate!(0);
+array_abomonate!(1);
+array_abomonate!(2);
+array_abomonate!(3);
+array_abomonate!(4);
 
 impl Abomonation for String {
     #[inline]
