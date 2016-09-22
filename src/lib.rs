@@ -312,6 +312,27 @@ impl<T: Abomonation> Abomonation for Option<T> {
     }
 }
 
+impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
+    #[inline] unsafe fn embalm(&mut self) {
+        match self {
+            &mut Ok(ref mut inner) => inner.embalm(),
+            &mut Err(ref mut inner) => inner.embalm(),
+        }
+    }
+    #[inline] unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
+        match self {
+            &Ok(ref inner) => inner.entomb(bytes),
+            &Err(ref inner) => inner.entomb(bytes),
+        }
+    }
+    #[inline] unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
+        match self {
+            &mut Ok(ref mut inner) => inner.exhume(bytes),
+            &mut Err(ref mut inner) => inner.exhume(bytes),
+        }
+    }
+}
+
 tuple_abomonate!(A);
 tuple_abomonate!(A B);
 tuple_abomonate!(A B C);
