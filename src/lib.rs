@@ -234,7 +234,7 @@ macro_rules! unsafe_abomonate {
         }
     };
     ($($name:ident),+ ; $t: ty : $($field:ident),*) => {
-        impl<$($name: Abomonation),*> Abomonation for $t<$($name),*> {
+        impl<$($name: Abomonation),*> Abomonation for $t {
             #[inline] unsafe fn entomb(&self, _writer: &mut Vec<u8>) {
                 $( self.$field.entomb(_writer); )*
             }
