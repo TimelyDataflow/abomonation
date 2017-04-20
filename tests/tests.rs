@@ -60,6 +60,31 @@ fn test_macro() {
     }
 }
 
+
+// #[derive(Eq, PartialEq)]
+// struct MyGenericStruct<T: Ord> {
+//     item: T
+// }
+
+// unsafe_abomonate!(T:Ord+Abomonation; MyStruct<T> : item);
+
+// #[test]
+// fn test_generic_macro() {
+//     // create some test data out of abomonation-approved types
+//     let record = MyGenericStruct{ item: "hello".to_owned() };
+
+//     // encode vector into a Vec<u8>
+//     let mut bytes = Vec::new();
+//     unsafe { encode(&record, &mut bytes); }
+
+//     // decode a &Vec<(u64, String)> from binary data
+//     if let Some((result, rest)) = unsafe { decode::<MyGenericStruct>(&mut bytes) } {
+//         assert!(result == &record);
+//         assert!(rest.len() == 0);
+//     }
+// }
+
+
 #[test]
 fn test_multiple_encode_decode() {
     let mut bytes = Vec::new();

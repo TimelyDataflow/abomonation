@@ -233,20 +233,21 @@ macro_rules! unsafe_abomonate {
             }
         }
     };
-    ($($name:ident),+ ; $t: ty : $($field:ident),*) => {
-        impl<$($name: Abomonation),*> Abomonation for $t {
-            #[inline] unsafe fn entomb(&self, _writer: &mut Vec<u8>) {
-                $( self.$field.entomb(_writer); )*
-            }
-            #[inline] unsafe fn embalm(&mut self) {
-                $( self.$field.embalm(); )*
-            }
-            #[inline] unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
-                $( let temp = bytes; bytes = if let Some(bytes) = self.$field.exhume(temp) { bytes} else { return None }; )*
-                Some(bytes)
-            }
-        }
-    };
+    // // TODO: This doesn't seem to work. Not obvious how to fix with constraints on generic parameters.
+    // ($($name:ident),+ ; $t: ty : $($field:ident),*) => {
+    //     impl<$($name: Abomonation),*> Abomonation for $t {
+    //         #[inline] unsafe fn entomb(&self, _writer: &mut Vec<u8>) {
+    //             $( self.$field.entomb(_writer); )*
+    //         }
+    //         #[inline] unsafe fn embalm(&mut self) {
+    //             $( self.$field.embalm(); )*
+    //         }
+    //         #[inline] unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+    //             $( let temp = bytes; bytes = if let Some(bytes) = self.$field.exhume(temp) { bytes} else { return None }; )*
+    //             Some(bytes)
+    //         }
+    //     }
+    // };
 }
 
 // general code for tuples (can't use '0', '1', ... as field identifiers)
@@ -371,6 +372,34 @@ array_abomonate!(1);
 array_abomonate!(2);
 array_abomonate!(3);
 array_abomonate!(4);
+array_abomonate!(5);
+array_abomonate!(6);
+array_abomonate!(7);
+array_abomonate!(8);
+array_abomonate!(9);
+array_abomonate!(10);
+array_abomonate!(11);
+array_abomonate!(12);
+array_abomonate!(13);
+array_abomonate!(14);
+array_abomonate!(15);
+array_abomonate!(16);
+array_abomonate!(17);
+array_abomonate!(18);
+array_abomonate!(19);
+array_abomonate!(20);
+array_abomonate!(21);
+array_abomonate!(22);
+array_abomonate!(23);
+array_abomonate!(24);
+array_abomonate!(25);
+array_abomonate!(26);
+array_abomonate!(27);
+array_abomonate!(28);
+array_abomonate!(29);
+array_abomonate!(30);
+array_abomonate!(31);
+array_abomonate!(32);
 
 impl Abomonation for String {
     #[inline]
