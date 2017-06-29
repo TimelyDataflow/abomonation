@@ -4,8 +4,8 @@ use abomonation::*;
 
 #[test] fn test_array() { _test_pass(vec![[0, 1, 2]; 1024]); }
 #[test] fn test_opt_vec() { _test_pass(vec![Some(vec![0,1,2]), None]); }
-#[test] fn test_result_vec_str() { _test_pass(vec![Ok(vec![0, 1, 2]), Err("grawwwwrr!"), Ok(vec![])]); }
-#[test] fn test_str_ref() { _test_pass(vec!["hi there"; 245]); }
+// #[test] fn test_result_vec_str() { _test_pass(vec![Ok(vec![0, 1, 2]), Err("grawwwwrr!"), Ok(vec![])]); }
+// #[test] fn test_str_ref() { _test_pass(vec!["hi there"; 245]); }
 #[test] fn test_alignment() { _test_pass(vec![(format!("x"), vec![1,2,3]); 1024]); }
 #[test] fn test_option_box_u64() { _test_pass(vec![Some(Box::new(0u64))]); }
 #[test] fn test_option_vec() { _test_pass(vec![Some(vec![0, 1, 2])]); }
