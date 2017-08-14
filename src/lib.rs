@@ -39,6 +39,7 @@
 
 use std::mem;       // yup, used pretty much everywhere.
 use std::io::Write; // for bytes.write_all; push_all is unstable and extend is slow.
+use std::marker::PhantomData;
 
 const EMPTY: *mut () = 0x1 as *mut ();
 
@@ -293,6 +294,8 @@ impl Abomonation for bool { }
 impl Abomonation for () { }
 
 impl Abomonation for char { }
+
+impl<T> Abomonation for PhantomData<T> {}
 
 impl<T: Abomonation> Abomonation for Option<T> {
     #[inline] unsafe fn embalm(&mut self) {
