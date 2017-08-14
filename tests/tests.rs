@@ -18,6 +18,13 @@ use abomonation::*;
 #[test] fn test_string_fail() { _test_fail(vec![format!("grawwwwrr!"); 1024]); }
 #[test] fn test_vec_u_s_fail() { _test_fail(vec![vec![(0u64, format!("grawwwwrr!")); 32]; 32]); }
 
+#[test]
+fn test_phantom_data_for_non_abomonatable_type() {
+    use std::marker::PhantomData;
+    struct NotAbomonatable;
+    _test_pass(PhantomData::<NotAbomonatable>::default());
+}
+
 fn _test_pass<T: Abomonation+Eq>(record: T) {
     let mut bytes = Vec::new();
     unsafe { encode(&record, &mut bytes); }
@@ -27,6 +34,7 @@ fn _test_pass<T: Abomonation+Eq>(record: T) {
         assert!(rest.len() == 0);
     }
 }
+
 
 fn _test_fail<T: Abomonation>(record: T) {
     let mut bytes = Vec::new();
