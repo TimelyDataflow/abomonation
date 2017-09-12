@@ -344,6 +344,29 @@ tuple_abomonate!(A B C D E F G);
 tuple_abomonate!(A B C D E F G H);
 tuple_abomonate!(A B C D E F G H I);
 tuple_abomonate!(A B C D E F G H I J);
+tuple_abomonate!(A B C D E F G H I J K);
+tuple_abomonate!(A B C D E F G H I J K L);
+tuple_abomonate!(A B C D E F G H I J K L M);
+tuple_abomonate!(A B C D E F G H I J K L M N);
+tuple_abomonate!(A B C D E F G H I J K L M N O);
+tuple_abomonate!(A B C D E F G H I J K L M N O P);
+tuple_abomonate!(A B C D E F G H I J K L M N O P Q);
+tuple_abomonate!(A B C D E F G H I J K L M N O P Q R);
+tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S);
+tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T);
+tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U);
+tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V);
+tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W);
+tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X);
+tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y);
+tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z);
+tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA);
+tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB);
+tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC);
+tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD);
+tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD AE);
+tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD AE AF);
+
 
 macro_rules! array_abomonate {
     ($size:expr) => (
