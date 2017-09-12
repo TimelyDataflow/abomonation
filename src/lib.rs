@@ -329,7 +329,7 @@ impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
             &Err(ref inner) => inner.entomb(bytes),
         }
     }
-    #[inline] unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
+    #[inline] unsafe fn exhume<'a, 'b>(&'a mut self, bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
         match self {
             &mut Ok(ref mut inner) => inner.exhume(bytes),
             &mut Err(ref mut inner) => inner.exhume(bytes),
