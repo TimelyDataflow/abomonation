@@ -12,6 +12,9 @@ use test::Bencher;
 #[bench] fn u64_enc(bencher: &mut Bencher) { _bench_enc(bencher, vec![0u64; 1024]); }
 #[bench] fn u64_dec(bencher: &mut Bencher) { _bench_dec(bencher, vec![0u64; 1024]); }
 
+#[bench] fn u32x2_enc(bencher: &mut Bencher) { _bench_enc(bencher, vec![(0u32,0u32); 1024]); }
+#[bench] fn u32x2_dec(bencher: &mut Bencher) { _bench_dec(bencher, vec![(0u32,0u32); 1024]); }
+
 #[bench] fn u8_u64_enc(bencher: &mut Bencher) { _bench_enc(bencher, vec![(0u8, 0u64); 512]); }
 #[bench] fn u8_u64_dec(bencher: &mut Bencher) { _bench_dec(bencher, vec![(0u8, 0u64); 512]); }
 
@@ -31,13 +34,13 @@ fn _bench_enc<T: Abomonation>(bencher: &mut Bencher, record: T) {
 
     // prepare encoded data for bencher.bytes
     let mut bytes = Vec::new();
-    unsafe { encode(&record, &mut bytes); }
+    unsafe { encode(&record, &mut bytes).unwrap(); }
 
     // repeatedly encode this many bytes
     bencher.bytes = bytes.len() as u64;
     bencher.iter(|| {
         bytes.clear();
-        unsafe { encode(&record, &mut bytes) }
+        unsafe { encode(&record, &mut bytes).unwrap(); }
     });
 }
 
@@ -45,7 +48,7 @@ fn _bench_dec<T: Abomonation+Eq>(bencher: &mut Bencher, record: T) {
 
     // prepare encoded data
     let mut bytes = Vec::new();
-    unsafe { encode(&record, &mut bytes); }
+    unsafe { encode(&record, &mut bytes).unwrap(); }
 
     // repeatedly decode (and validate)
     bencher.bytes = bytes.len() as u64;

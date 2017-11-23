@@ -38,7 +38,7 @@ fn test_phantom_data_for_non_abomonatable_type() {
 
 fn _test_pass<T: Abomonation+Eq>(record: T) {
     let mut bytes = Vec::new();
-    unsafe { encode(&record, &mut bytes); }
+    unsafe { encode(&record, &mut bytes).unwrap(); }
     {
         let (result, rest) = unsafe { decode::<T>(&mut bytes[..]) }.unwrap();
         assert!(&record == result);
@@ -48,14 +48,14 @@ fn _test_pass<T: Abomonation+Eq>(record: T) {
 
 fn _test_fail<T: Abomonation>(record: T) {
     let mut bytes = Vec::new();
-    unsafe { encode(&record, &mut bytes); }
+    unsafe { encode(&record, &mut bytes).unwrap(); }
     bytes.pop();
     assert!(unsafe { decode::<T>(&mut bytes[..]) }.is_none());
 }
 
 fn _test_size<T: AbomonationSize>(record: T) {
     let mut bytes = Vec::new();
-    unsafe { encode(&record, &mut bytes); }
+    unsafe { encode(&record, &mut bytes).unwrap(); }
     assert_eq!(bytes.len(), record.measure());
 }
 
@@ -76,7 +76,7 @@ fn test_macro() {
 
     // encode vector into a Vec<u8>
     let mut bytes = Vec::new();
-    unsafe { encode(&record, &mut bytes); }
+    unsafe { encode(&record, &mut bytes).unwrap(); }
 
     // decode a &Vec<(u64, String)> from binary data
     if let Some((result, rest)) = unsafe { decode::<MyStruct>(&mut bytes) } {
@@ -103,7 +103,7 @@ fn test_macro_size() {
 
     // encode vector into a Vec<u8>
     let mut bytes = Vec::new();
-    unsafe { encode(&record, &mut bytes); }
+    unsafe { encode(&record, &mut bytes).unwrap(); }
     assert_eq!(bytes.len(), record.measure());
 }
 
@@ -134,10 +134,10 @@ fn test_macro_size() {
 #[test]
 fn test_multiple_encode_decode() {
     let mut bytes = Vec::new();
-    unsafe { encode(&0u32, &mut bytes); }
-    unsafe { encode(&7u64, &mut bytes); }
-    unsafe { encode(&vec![1,2,3], &mut bytes); }
-    unsafe { encode(&"grawwwwrr".to_owned(), &mut bytes); }
+    unsafe { encode(&0u32, &mut bytes).unwrap(); }
+    unsafe { encode(&7u64, &mut bytes).unwrap(); }
+    unsafe { encode(&vec![1,2,3], &mut bytes).unwrap(); }
+    unsafe { encode(&"grawwwwrr".to_owned(), &mut bytes).unwrap(); }
 
     let (t, r) = unsafe { decode::<u32>(&mut bytes) }.unwrap(); assert!(*t == 0);
     let (t, r) = unsafe { decode::<u64>(r) }.unwrap(); assert!(*t == 7);

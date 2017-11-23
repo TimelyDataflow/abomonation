@@ -17,11 +17,11 @@ fn bench_populate(b: &mut Bencher) {
 fn bench_serialize(b: &mut Bencher) {
     let log = Log::new();
     let mut bytes = vec![];
-    unsafe { encode(&log, &mut bytes); }
+    unsafe { encode(&log, &mut bytes).unwrap(); }
     b.bytes = bytes.len() as u64;
     b.iter(|| {
         bytes.clear();
-        unsafe { encode(&log, &mut bytes); }
+        unsafe { encode(&log, &mut bytes).unwrap(); }
         test::black_box(&bytes);
     });
 }
@@ -30,7 +30,7 @@ fn bench_serialize(b: &mut Bencher) {
 fn bench_deserialize(b: &mut Bencher) {
     let log = Log::new();
     let mut bytes = vec![];
-    unsafe { encode(&log, &mut bytes); }
+    unsafe { encode(&log, &mut bytes).unwrap(); }
     b.bytes = bytes.len() as u64;
     b.iter(|| {
         test::black_box(unsafe { decode::<Log>(&mut bytes) });
@@ -41,7 +41,7 @@ fn bench_deserialize(b: &mut Bencher) {
 fn bench_deserialize_assert(b: &mut Bencher) {
     let log = Log::new();
     let mut bytes = vec![];
-    unsafe { encode(&log, &mut bytes); }
+    unsafe { encode(&log, &mut bytes).unwrap(); }
     b.bytes = bytes.len() as u64;
     b.iter(|| {
         assert!(unsafe { decode::<Log>(&mut bytes) }.unwrap().0 == &log);
