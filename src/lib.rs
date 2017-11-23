@@ -41,6 +41,11 @@ use std::mem;       // yup, used pretty much everywhere.
 use std::io::Write; // for bytes.write_all; push_all is unstable and extend is slow.
 use std::marker::PhantomData;
 
+pub mod size;
+pub mod abomonated;
+
+pub use size::AbomonationSize;
+
 const EMPTY: *mut () = 0x1 as *mut ();
 
 macro_rules! try_option {
@@ -78,7 +83,7 @@ macro_rules! try_option {
 ///
 #[inline]
 pub unsafe fn encode<T: Abomonation>(typed: &T, bytes: &mut Vec<u8>) {
-    let start = bytes.len();            // may not be empty!
+    let start = bytes.len();            // may be non-empty!
     let slice = std::slice::from_raw_parts(mem::transmute(typed), mem::size_of::<T>());
 
     // TODO : At the moment, this does not compile to a memcpy, 
@@ -219,7 +224,9 @@ pub trait Abomonation {
 /// ```
 #[macro_export]
 macro_rules! unsafe_abomonate {
-    ($t:ty) => { impl Abomonation for $t { } };
+    ($t:ty) => { 
+        impl Abomonation for $t { }
+    };
     ($t:ty : $($field:ident),*) => {
         impl Abomonation for $t {
             #[inline] unsafe fn entomb(&self, _writer: &mut Vec<u8>) {
@@ -270,6 +277,15 @@ macro_rules! tuple_abomonate {
                 let ($(ref mut $name,)*) = *self;
                 $( let temp = bytes; bytes = if let Some(bytes) = $name.exhume(temp) { bytes} else { return None }; )*
                 Some(bytes)
+            }
+        }
+        impl<$($name: AbomonationSize),*> AbomonationSize for ($($name,)*) {
+            #[allow(non_snake_case)]
+            #[inline] fn extent(&self) -> usize {
+                let mut size = 0;
+                let ($(ref $name,)*) = *self;
+                $( size += $name.extent(); )*
+                size
             }
         }
     );
@@ -388,6 +404,15 @@ macro_rules! array_abomonate {
                     let tmp = bytes; bytes = try_option!(element.exhume(tmp));
                 }
                 Some(bytes)
+            }
+        }
+        impl<T: AbomonationSize> AbomonationSize for [T; $size] {
+            #[inline] fn extent(&self) -> usize {
+                let mut size = 0;
+                for element in self {
+                    size += element.extent();
+                }
+                size
             }
         }
     )
