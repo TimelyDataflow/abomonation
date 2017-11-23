@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate abomonation;
+
 use abomonation::*;
 
 #[test] fn test_array() { _test_pass(vec![[0, 1, 2]; 1024]); }
@@ -18,6 +19,16 @@ use abomonation::*;
 #[test] fn test_string_fail() { _test_fail(vec![format!("grawwwwrr!"); 1024]); }
 #[test] fn test_vec_u_s_fail() { _test_fail(vec![vec![(0u64, format!("grawwwwrr!")); 32]; 32]); }
 
+#[test] fn test_array_size() { _test_size(vec![[0, 1, 2]; 1024]); }
+#[test] fn test_opt_vec_size() { _test_size(vec![Some(vec![0,1,2]), None]); }
+#[test] fn test_alignment_size() { _test_size(vec![(format!("x"), vec![1,2,3]); 1024]); }
+#[test] fn test_option_box_u64_size() { _test_size(vec![Some(Box::new(0u64))]); }
+#[test] fn test_option_vec_size() { _test_size(vec![Some(vec![0, 1, 2])]); }
+#[test] fn test_u32x4_size() { _test_size(vec![((1,2,3),vec![(0u32, 0u32, 0u32, 0u32); 1024])]); }
+#[test] fn test_u64_size() { _test_size(vec![0u64; 1024]); }
+#[test] fn test_string_size() { _test_size(vec![format!("grawwwwrr!"); 1024]); }
+#[test] fn test_vec_u_s_size() { _test_size(vec![vec![(0u64, format!("grawwwwrr!")); 32]; 32]); }
+
 #[test]
 fn test_phantom_data_for_non_abomonatable_type() {
     use std::marker::PhantomData;
@@ -35,13 +46,19 @@ fn _test_pass<T: Abomonation+Eq>(record: T) {
     }
 }
 
-
 fn _test_fail<T: Abomonation>(record: T) {
     let mut bytes = Vec::new();
     unsafe { encode(&record, &mut bytes); }
     bytes.pop();
     assert!(unsafe { decode::<T>(&mut bytes[..]) }.is_none());
 }
+
+fn _test_size<T: AbomonationSize>(record: T) {
+    let mut bytes = Vec::new();
+    unsafe { encode(&record, &mut bytes); }
+    assert_eq!(bytes.len(), record.measure());
+}
+
 
 #[derive(Eq, PartialEq)]
 struct MyStruct {
@@ -68,6 +85,27 @@ fn test_macro() {
     }
 }
 
+
+
+#[derive(Eq, PartialEq)]
+struct MyStruct2 {
+    a: String,
+    b: u64,
+    c: Vec<u8>,
+}
+
+unsafe_abomonate_size!(MyStruct2 : a, b, c);
+
+#[test]
+fn test_macro_size() {
+    // create some test data out of abomonation-approved types
+    let record = MyStruct2{ a: "test".to_owned(), b: 0, c: vec![0, 1, 2] };
+
+    // encode vector into a Vec<u8>
+    let mut bytes = Vec::new();
+    unsafe { encode(&record, &mut bytes); }
+    assert_eq!(bytes.len(), record.measure());
+}
 
 // #[derive(Eq, PartialEq)]
 // struct MyGenericStruct<T: Ord> {
