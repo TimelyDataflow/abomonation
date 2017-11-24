@@ -10,11 +10,9 @@ macro_rules! unsafe_abomonate_size {
     };
     ($t:ty : $($field:ident),*) => {
         impl Abomonation for $t {
-            #[inline] unsafe fn entomb(&self, _writer: &mut Vec<u8>) {
-                $( self.$field.entomb(_writer); )*
-            }
-            #[inline] unsafe fn embalm(&mut self) {
-                $( self.$field.embalm(); )*
+            #[inline] unsafe fn entomb<W: ::std::io::Write>(&self, write: &mut W) -> ::std::io::Result<()> {
+                $( self.$field.entomb(write)?; )*
+                Ok(())
             }
             #[inline] unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
                 $( let temp = bytes; bytes = if let Some(bytes) = self.$field.exhume(temp) { bytes} else { return None }; )*

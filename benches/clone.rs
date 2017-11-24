@@ -31,13 +31,13 @@ fn _bench_e_d<T: Abomonation>(bencher: &mut Bencher, record: T) {
 
     // prepare encoded data for bencher.bytes
     let mut bytes = Vec::new();
-    unsafe { encode(&record, &mut bytes); }
+    unsafe { encode(&record, &mut bytes).unwrap(); }
 
     // repeatedly encode this many bytes
     bencher.bytes = bytes.len() as u64;
     bencher.iter(|| {
         bytes = vec![];
-        unsafe { encode(&record, &mut bytes) }
+        unsafe { encode(&record, &mut bytes).unwrap(); }
         unsafe { decode::<T>(&mut bytes) }.is_some()
     });
 }
@@ -46,7 +46,7 @@ fn _bench_cln<T: Abomonation+Clone>(bencher: &mut Bencher, record: T) {
 
     // prepare encoded data
     let mut bytes = Vec::new();
-    unsafe { encode(&record, &mut bytes); }
+    unsafe { encode(&record, &mut bytes).unwrap(); }
 
     // repeatedly decode (and validate)
     bencher.bytes = bytes.len() as u64;

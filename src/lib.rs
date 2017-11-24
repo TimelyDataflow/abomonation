@@ -39,6 +39,7 @@
 
 use std::mem;       // yup, used pretty much everywhere.
 use std::io::Write; // for bytes.write_all; push_all is unstable and extend is slow.
+use std::io::Result as IOResult;
 use std::marker::PhantomData;
 
 pub mod size;
@@ -46,14 +47,14 @@ pub mod abomonated;
 
 pub use size::AbomonationSize;
 
-const EMPTY: *mut () = 0x1 as *mut ();
+// const EMPTY: *mut () = 0x1 as *mut ();
 
-macro_rules! try_option {
-    ($expr:expr) => (match $expr {
-        Some(val) => val,
-        None => { return None }
-    })
-}
+// macro_rules! try_option {
+//     ($expr:expr) => (match $expr {
+//         Some(val) => val,
+//         None => { return None }
+//     })
+// }
 
 /// Encodes a typed reference into a binary buffer.
 ///
@@ -82,25 +83,11 @@ macro_rules! try_option {
 /// ```
 ///
 #[inline]
-pub unsafe fn encode<T: Abomonation>(typed: &T, bytes: &mut Vec<u8>) {
-    let start = bytes.len();            // may be non-empty!
+pub unsafe fn encode<T: Abomonation, W: Write>(typed: &T, write: &mut W) -> IOResult<()> {
     let slice = std::slice::from_raw_parts(mem::transmute(typed), mem::size_of::<T>());
-
-    // TODO : At the moment, this does not compile to a memcpy, 
-    // due to Rust working around LLVM soundness bugs.
-
-    // bytes.write_all(slice).unwrap();    // Rust claims a write to a Vec<u8> will never fail.
-
-    // TODO : Instead, we use the following hunk of code:
-    let position = bytes.len();
-    bytes.reserve(slice.len());
-    ::std::ptr::copy_nonoverlapping(slice.as_ptr(), bytes.as_mut_ptr().offset(position as isize), slice.len());
-    bytes.set_len(position + slice.len());
-    // TODO : End hunk of replacement code
-
-    let result: &mut T = mem::transmute(bytes.as_mut_ptr().offset(start as isize));
-    result.embalm();
-    typed.entomb(bytes);
+    write.write_all(slice)?;
+    typed.entomb(write)?;
+    Ok(())
 }
 
 /// Decodes a mutable binary slice into an immutable typed reference.
@@ -168,14 +155,9 @@ pub trait Abomonation {
 
     /// Write any additional information about `&self` beyond its binary representation.
     ///
-    /// Most commonly this is owned data on the other end of pointers in `&self`.
-    #[inline(always)] unsafe fn entomb(&self, _writer: &mut Vec<u8>) { }
-
-    /// Perform any final edits before committing `&mut self`. Importantly, this method should only
-    /// manipulate the fields of `self`; any owned memory may not be valid.
-    ///
-    /// Most commonly this overwrites pointers whose values should not be serialized.
-    #[inline(always)] unsafe fn embalm(&mut self) { }
+    /// Most commonly this is owned data on the other end of pointers in `&self`. The return value
+    /// reports any failures in writing to `write`.
+    #[inline(always)] unsafe fn entomb<W: Write>(&self, _write: &mut W) -> IOResult<()> { Ok(()) }
 
     /// Recover any information for `&mut self` not evident from its binary representation.
     ///
@@ -229,11 +211,9 @@ macro_rules! unsafe_abomonate {
     };
     ($t:ty : $($field:ident),*) => {
         impl Abomonation for $t {
-            #[inline] unsafe fn entomb(&self, _writer: &mut Vec<u8>) {
-                $( self.$field.entomb(_writer); )*
-            }
-            #[inline] unsafe fn embalm(&mut self) {
-                $( self.$field.embalm(); )*
+            #[inline] unsafe fn entomb<W: ::std::io::Write>(&self, write: &mut W) -> ::std::io::Result<()> {
+                $( self.$field.entomb(write)?; )*
+                Ok(())
             }
             #[inline] unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
                 $( let temp = bytes; bytes = if let Some(bytes) = self.$field.exhume(temp) { bytes} else { return None }; )*
@@ -241,21 +221,6 @@ macro_rules! unsafe_abomonate {
             }
         }
     };
-    // // TODO: This doesn't seem to work. Not obvious how to fix with constraints on generic parameters.
-    // ($($name:ident),+ ; $t: ty : $($field:ident),*) => {
-    //     impl<$($name: Abomonation),*> Abomonation for $t {
-    //         #[inline] unsafe fn entomb(&self, _writer: &mut Vec<u8>) {
-    //             $( self.$field.entomb(_writer); )*
-    //         }
-    //         #[inline] unsafe fn embalm(&mut self) {
-    //             $( self.$field.embalm(); )*
-    //         }
-    //         #[inline] unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
-    //             $( let temp = bytes; bytes = if let Some(bytes) = self.$field.exhume(temp) { bytes} else { return None }; )*
-    //             Some(bytes)
-    //         }
-    //     }
-    // };
 }
 
 // general code for tuples (can't use '0', '1', ... as field identifiers)
@@ -263,17 +228,13 @@ macro_rules! tuple_abomonate {
     ( $($name:ident)+) => (
         impl<$($name: Abomonation),*> Abomonation for ($($name,)*) {
             #[allow(non_snake_case)]
-            #[inline] unsafe fn entomb(&self, _writer: &mut Vec<u8>) {
+            #[inline(always)] unsafe fn entomb<WRITE: Write>(&self, write: &mut WRITE) -> IOResult<()> {
                 let ($(ref $name,)*) = *self;
-                $($name.entomb(_writer);)*
+                $($name.entomb(write)?;)*
+                Ok(())
             }
             #[allow(non_snake_case)]
-            #[inline] unsafe fn embalm(&mut self) {
-                let ($(ref mut $name,)*) = *self;
-                $($name.embalm();)*
-            }
-            #[allow(non_snake_case)]
-            #[inline] unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+            #[inline(always)] unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
                 let ($(ref mut $name,)*) = *self;
                 $( let temp = bytes; bytes = if let Some(bytes) = $name.exhume(temp) { bytes} else { return None }; )*
                 Some(bytes)
@@ -281,7 +242,7 @@ macro_rules! tuple_abomonate {
         }
         impl<$($name: AbomonationSize),*> AbomonationSize for ($($name,)*) {
             #[allow(non_snake_case)]
-            #[inline] fn extent(&self) -> usize {
+            #[inline(always)] fn extent(&self) -> usize {
                 let mut size = 0;
                 let ($(ref $name,)*) = *self;
                 $( size += $name.extent(); )*
@@ -314,38 +275,29 @@ impl Abomonation for char { }
 impl<T> Abomonation for PhantomData<T> {}
 
 impl<T: Abomonation> Abomonation for Option<T> {
-    #[inline] unsafe fn embalm(&mut self) {
-        if let &mut Some(ref mut inner) = self {
-            inner.embalm();
-        }
-    }
-    #[inline] unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
+    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         if let &Some(ref inner) = self {
-            inner.entomb(bytes);
+            inner.entomb(write)?;
         }
+        Ok(())
     }
-    #[inline] unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
+    #[inline(always)] unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
         if let &mut Some(ref mut inner) = self {
-            let tmp = bytes; bytes = try_option!(inner.exhume(tmp));
+            let tmp = bytes; bytes = inner.exhume(tmp)?;
         }
         Some(bytes)
     }
 }
 
 impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
-    #[inline] unsafe fn embalm(&mut self) {
+    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         match self {
-            &mut Ok(ref mut inner) => inner.embalm(),
-            &mut Err(ref mut inner) => inner.embalm(),
-        }
+            &Ok(ref inner) => inner.entomb(write)?,
+            &Err(ref inner) => inner.entomb(write)?,
+        };
+        Ok(())
     }
-    #[inline] unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
-        match self {
-            &Ok(ref inner) => inner.entomb(bytes),
-            &Err(ref inner) => inner.entomb(bytes),
-        }
-    }
-    #[inline] unsafe fn exhume<'a, 'b>(&'a mut self, bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
+    #[inline(always)] unsafe fn exhume<'a, 'b>(&'a mut self, bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
         match self {
             &mut Ok(ref mut inner) => inner.exhume(bytes),
             &mut Err(ref mut inner) => inner.exhume(bytes),
@@ -390,24 +342,21 @@ tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD
 macro_rules! array_abomonate {
     ($size:expr) => (
         impl<T: Abomonation> Abomonation for [T; $size] {
-            #[inline] 
-            unsafe fn embalm(&mut self) {
-                for element in self { element.embalm(); }
+            #[inline(always)]
+            unsafe fn entomb<W: Write>(&self, write: &mut W) ->  IOResult<()> {
+                for element in self { element.entomb(write)?; }
+                Ok(())
             }
-            #[inline]
-            unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
-                for element in self { element.entomb(bytes); }
-            }
-            #[inline]
+            #[inline(always)]
             unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
                 for element in self { 
-                    let tmp = bytes; bytes = try_option!(element.exhume(tmp));
+                    let tmp = bytes; bytes = element.exhume(tmp)?;
                 }
                 Some(bytes)
             }
         }
         impl<T: AbomonationSize> AbomonationSize for [T; $size] {
-            #[inline] fn extent(&self) -> usize {
+            #[inline(always)] fn extent(&self) -> usize {
                 let mut size = 0;
                 for element in self {
                     size += element.extent();
@@ -454,24 +403,9 @@ array_abomonate!(32);
 
 impl Abomonation for String {
     #[inline]
-    unsafe fn embalm(&mut self) {
-        std::ptr::write(self, String::from_raw_parts(EMPTY as *mut u8, self.len(), self.len()));
-    }
-    #[inline]
-    unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
-
-        // TODO : At the moment, this does not compile to a memcpy, 
-        // due to Rust working around LLVM soundness bugs.
-
-        // bytes.write_all(self.as_bytes()).unwrap();
-
-        // TODO : Instead, we use the following hunk of code:
-        let position = bytes.len();
-        bytes.reserve(self.as_bytes().len());
-        ::std::ptr::copy_nonoverlapping(self.as_bytes().as_ptr(), bytes.as_mut_ptr().offset(position as isize), self.as_bytes().len());
-        bytes.set_len(position + self.as_bytes().len());
-        // TODO : End hunk of replacement code
-
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+        write.write_all(self.as_bytes())?;
+        Ok(())
     }
     #[inline]
     unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
@@ -520,27 +454,10 @@ impl Abomonation for String {
 
 impl<T: Abomonation> Abomonation for Vec<T> {
     #[inline]
-    unsafe fn embalm(&mut self) {
-        std::ptr::write(self, Vec::from_raw_parts(EMPTY as *mut T, self.len(), self.len()));
-    }
-    #[inline]
-    unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
-        let position = bytes.len();
-
-        // TODO : At the moment, this does not compile to a memcpy, 
-        // due to Rust working around LLVM soundness bugs.
-
-        // bytes.write_all(typed_to_bytes(&self[..])).unwrap();
-
-        // TODO : Instead, we use the following hunk of code:
-        let typed_bytes = typed_to_bytes(&self[..]);
-        bytes.reserve(typed_bytes.len());
-        ::std::ptr::copy_nonoverlapping(typed_bytes.as_ptr(), bytes.as_mut_ptr().offset(position as isize), typed_bytes.len());
-        bytes.set_len(position + typed_bytes.len());
-        // TODO : End hunk of replacement code
-
-        for element in bytes_to_typed::<T>(&mut bytes[position..], self.len()) { element.embalm(); }
-        for element in self.iter() { element.entomb(bytes); }
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+        write.write_all(typed_to_bytes(&self[..]))?;
+        for element in self.iter() { element.entomb(write)?; }
+        Ok(())
     }
     #[inline]
     unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
@@ -554,7 +471,7 @@ impl<T: Abomonation> Abomonation for Vec<T> {
             std::ptr::write(self, Vec::from_raw_parts(slice.as_mut_ptr(), self.len(), self.len()));
             for element in self.iter_mut() {
                 let temp = rest;             // temp variable explains lifetimes (mysterious!)
-                rest = try_option!(element.exhume(temp));
+                rest = element.exhume(temp)?;
             }
             Some(rest)
         }
@@ -608,15 +525,10 @@ impl<T: Abomonation> Abomonation for Vec<T> {
 
 impl<T: Abomonation> Abomonation for Box<T> {
     #[inline]
-    unsafe fn embalm(&mut self) {
-        std::ptr::write(self, mem::transmute(EMPTY as *mut T));
-    }
-    #[inline]
-    unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
-        let position = bytes.len();
-        bytes.write_all(std::slice::from_raw_parts(mem::transmute(&**self), mem::size_of::<T>())).unwrap();
-        bytes_to_typed::<T>(&mut bytes[position..], 1)[0].embalm();
-        (**self).entomb(bytes);
+    unsafe fn entomb<W: Write>(&self, bytes: &mut W) -> IOResult<()> {
+        bytes.write_all(std::slice::from_raw_parts(mem::transmute(&**self), mem::size_of::<T>()))?;
+        (**self).entomb(bytes)?;
+        Ok(())
     }
     #[inline]
     unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
@@ -625,7 +537,7 @@ impl<T: Abomonation> Abomonation for Box<T> {
         else {
             let (mine, mut rest) = bytes.split_at_mut(binary_len);
             std::ptr::write(self, mem::transmute(mine.as_mut_ptr() as *mut T));
-            let temp = rest; rest = try_option!((**self).exhume(temp));
+            let temp = rest; rest = (**self).exhume(temp)?;
             Some(rest)
         }
     }
@@ -636,7 +548,7 @@ impl<T: Abomonation> Abomonation for Box<T> {
     std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len() * mem::size_of::<T>())
 }
 
-// takes a len to make working with zero-size types easier
-#[inline] unsafe fn bytes_to_typed<T>(slice: &mut [u8], len: usize) -> &mut [T] {
-    std::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut T, len)
-}
+// // takes a len to make working with zero-size types easier
+// #[inline] unsafe fn bytes_to_typed<T>(slice: &mut [u8], len: usize) -> &mut [T] {
+//     std::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut T, len)
+// }

@@ -7,7 +7,7 @@ extern crate test;
 use recycler::{Recyclable, Recycler, make_recycler};
 use abomonation::*;
 use test::Bencher;
-use std::io::Read;
+// use std::io::Read;
 
 #[bench] fn empty_own(bencher: &mut Bencher) { _bench_own(bencher, vec![(); 1024]); }
 #[bench] fn u64_own(bencher: &mut Bencher) { _bench_own(bencher, vec![0u64; 1024]); }
@@ -31,7 +31,7 @@ fn _bench_own<T: Abomonation+Clone>(bencher: &mut Bencher, record: T) {
 
     // prepare encoded data
     let mut bytes = Vec::new();
-    unsafe { encode(&record, &mut bytes); }
+    unsafe { encode(&record, &mut bytes).unwrap(); }
 
     // repeatedly decode (and validate)
     bencher.bytes = bytes.len() as u64;
@@ -46,7 +46,7 @@ fn _bench_rec<T: Abomonation+Recyclable>(bencher: &mut Bencher, record: T) {
 
     // prepare encoded data
     let mut bytes = Vec::new();
-    unsafe { encode(&record, &mut bytes); }
+    unsafe { encode(&record, &mut bytes).unwrap(); }
     let mut recycler = make_recycler::<T>();
     recycler.recycle(record);
 
