@@ -42,10 +42,10 @@ use std::io::Write; // for bytes.write_all; push_all is unstable and extend is s
 use std::io::Result as IOResult;
 use std::marker::PhantomData;
 
-pub mod size;
+// pub mod size;
 pub mod abomonated;
 
-pub use size::AbomonationSize;
+// pub use size::AbomonationSize;
 
 // const EMPTY: *mut () = 0x1 as *mut ();
 
@@ -138,6 +138,12 @@ pub unsafe fn decode<T: Abomonation>(bytes: &mut [u8]) -> Option<(&T, &mut [u8])
     }
 }
 
+/// Reports the number of bytes required to encode `self`.
+#[inline]
+pub fn measure<T: Abomonation>(typed: &T) -> usize {
+    mem::size_of::<T>() + typed.extent()
+}
+
 /// Abomonation provides methods to serialize any heap data the implementor owns.
 ///
 /// The default implementations for Abomonation's methods are all empty. Many types have no owned
@@ -163,6 +169,9 @@ pub trait Abomonation {
     ///
     /// Most commonly this populates pointers with valid references into `bytes`.
     #[inline(always)] unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> { Some(bytes) }
+
+    /// Reports the number of further bytes required to entomb `self`.
+    #[inline(always)] fn extent(&self) -> usize { 0 }    
 }
 
 /// The `unsafe_abomonate!` macro takes a type name with an optional list of fields, and implements
@@ -216,8 +225,13 @@ macro_rules! unsafe_abomonate {
                 Ok(())
             }
             #[inline] unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
-                $( let temp = bytes; bytes = if let Some(bytes) = self.$field.exhume(temp) { bytes} else { return None }; )*
+                $( let temp = bytes; bytes = self.$field.exhume(temp)?; )*
                 Some(bytes)
+            }
+            #[inline] fn extent(&self) -> usize {
+                let mut size = 0;
+                $( size += self.$field.extent(); )*
+                size
             }
         }
     };
@@ -236,11 +250,9 @@ macro_rules! tuple_abomonate {
             #[allow(non_snake_case)]
             #[inline(always)] unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
                 let ($(ref mut $name,)*) = *self;
-                $( let temp = bytes; bytes = if let Some(bytes) = $name.exhume(temp) { bytes} else { return None }; )*
+                $( let temp = bytes; bytes = $name.exhume(temp)?; )*
                 Some(bytes)
             }
-        }
-        impl<$($name: AbomonationSize),*> AbomonationSize for ($($name,)*) {
             #[allow(non_snake_case)]
             #[inline(always)] fn extent(&self) -> usize {
                 let mut size = 0;
@@ -287,6 +299,9 @@ impl<T: Abomonation> Abomonation for Option<T> {
         }
         Some(bytes)
     }
+    #[inline] fn extent(&self) -> usize {
+        self.as_ref().map(|inner| inner.extent()).unwrap_or(0)
+    }
 }
 
 impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
@@ -301,6 +316,12 @@ impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
         match self {
             &mut Ok(ref mut inner) => inner.exhume(bytes),
             &mut Err(ref mut inner) => inner.exhume(bytes),
+        }
+    }
+    #[inline] fn extent(&self) -> usize {
+        match self {
+            &Ok(ref inner) => inner.extent(),
+            &Err(ref inner) => inner.extent(),
         }
     }
 }
@@ -354,8 +375,6 @@ macro_rules! array_abomonate {
                 }
                 Some(bytes)
             }
-        }
-        impl<T: AbomonationSize> AbomonationSize for [T; $size] {
             #[inline(always)] fn extent(&self) -> usize {
                 let mut size = 0;
                 for element in self {
@@ -416,6 +435,9 @@ impl Abomonation for String {
             Some(rest)
         }
     }
+    #[inline] fn extent(&self) -> usize {
+        self.len()
+    }
 }
 
 // TODO: Code deactivated because 'c unbound; would not be safe for e.g. 'static.
@@ -475,6 +497,14 @@ impl<T: Abomonation> Abomonation for Vec<T> {
             }
             Some(rest)
         }
+    }
+    #[inline] 
+    fn extent(&self) -> usize {
+        let mut sum = mem::size_of::<T>() * self.len();
+        for element in self.iter() {
+            sum += element.extent();
+        }
+        sum
     }
 }
 
@@ -540,6 +570,9 @@ impl<T: Abomonation> Abomonation for Box<T> {
             let temp = rest; rest = (**self).exhume(temp)?;
             Some(rest)
         }
+    }
+    #[inline] fn extent(&self) -> usize {
+        mem::size_of::<T>() + (&**self).extent()
     }
 }
 

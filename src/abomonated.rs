@@ -102,6 +102,7 @@ impl<T: Abomonation, S: DerefMut<Target=[u8]>> Abomonated<T, S> {
 
 impl<T: Abomonation, S: DerefMut<Target=[u8]>> Deref for Abomonated<T, S> {
     type Target = T;
+    #[inline]
     fn deref(&self) -> &T {
         let result: &T = unsafe { transmute(self.decoded.get_unchecked(0)) };
         result

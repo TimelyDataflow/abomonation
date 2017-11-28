@@ -53,10 +53,10 @@ fn _test_fail<T: Abomonation>(record: T) {
     assert!(unsafe { decode::<T>(&mut bytes[..]) }.is_none());
 }
 
-fn _test_size<T: AbomonationSize>(record: T) {
+fn _test_size<T: Abomonation>(record: T) {
     let mut bytes = Vec::new();
     unsafe { encode(&record, &mut bytes).unwrap(); }
-    assert_eq!(bytes.len(), record.measure());
+    assert_eq!(bytes.len(), measure(&record));
 }
 
 
@@ -85,26 +85,15 @@ fn test_macro() {
     }
 }
 
-
-
-#[derive(Eq, PartialEq)]
-struct MyStruct2 {
-    a: String,
-    b: u64,
-    c: Vec<u8>,
-}
-
-unsafe_abomonate_size!(MyStruct2 : a, b, c);
-
 #[test]
 fn test_macro_size() {
     // create some test data out of abomonation-approved types
-    let record = MyStruct2{ a: "test".to_owned(), b: 0, c: vec![0, 1, 2] };
+    let record = MyStruct{ a: "test".to_owned(), b: 0, c: vec![0, 1, 2] };
 
     // encode vector into a Vec<u8>
     let mut bytes = Vec::new();
     unsafe { encode(&record, &mut bytes).unwrap(); }
-    assert_eq!(bytes.len(), record.measure());
+    assert_eq!(bytes.len(), measure(&record));
 }
 
 // #[derive(Eq, PartialEq)]
