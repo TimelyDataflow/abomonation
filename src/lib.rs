@@ -42,19 +42,7 @@ use std::io::Write; // for bytes.write_all; push_all is unstable and extend is s
 use std::io::Result as IOResult;
 use std::marker::PhantomData;
 
-// pub mod size;
 pub mod abomonated;
-
-// pub use size::AbomonationSize;
-
-// const EMPTY: *mut () = 0x1 as *mut ();
-
-// macro_rules! try_option {
-//     ($expr:expr) => (match $expr {
-//         Some(val) => val,
-//         None => { return None }
-//     })
-// }
 
 /// Encodes a typed reference into a binary buffer.
 ///
@@ -580,8 +568,3 @@ impl<T: Abomonation> Abomonation for Box<T> {
 #[inline] unsafe fn typed_to_bytes<T>(slice: &[T]) -> &[u8] {
     std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len() * mem::size_of::<T>())
 }
-
-// // takes a len to make working with zero-size types easier
-// #[inline] unsafe fn bytes_to_typed<T>(slice: &mut [u8], len: usize) -> &mut [T] {
-//     std::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut T, len)
-// }
