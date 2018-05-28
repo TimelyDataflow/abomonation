@@ -12,12 +12,16 @@ use super::{Abomonation, decode};
 ///
 /// #Safety
 ///
-/// The safety of this type, and in particular its `transute` implementation of 
-/// the `Deref` trait, relies on the owned bytes not being externally mutated 
+/// The safety of this type, and in particular its `transute` implementation of
+/// the `Deref` trait, relies on the owned bytes not being externally mutated
 /// once provided. You could imagine a new type implementing `DerefMut` as required,
 /// but which also retains the ability (e.g. through `RefCell`) to mutate the bytes.
-/// This would be very bad, but seems hard to prevent in the type system. Please 
+/// This would be very bad, but seems hard to prevent in the type system. Please
 /// don't do this.
+///
+/// You must also use a type `S` whose bytes have a fixed location in memory.
+/// Otherwise moving an instance of `Abomonated<T, S>` may invalidate decoded
+/// pointers, and everything goes badly.
 ///
 /// #Examples
 ///
@@ -45,7 +49,7 @@ use super::{Abomonation, decode};
 ///     panic!("failed to decode");
 /// }
 /// ```
-pub struct Abomonated<T: Abomonation, S: DerefMut<Target=[u8]>> {
+pub struct Abomonated<T, S: DerefMut<Target=[u8]>> {
     phantom: PhantomData<T>,
     decoded: S,
 }
@@ -83,6 +87,12 @@ impl<T: Abomonation, S: DerefMut<Target=[u8]>> Abomonated<T, S> {
     ///     panic!("failed to decode");
     /// }
     /// ```
+    ///
+    /// #Safety
+    ///
+    /// The type `S` must have its bytes at a fixed location, which will
+    /// not change if the `bytes: S` instance is moved. Good examples are
+    /// `Vec<u8>` whereas bad examples are `[u8; 16]`.
     pub unsafe fn new(mut bytes: S) -> Option<Self> {
 
         // performs the underlying pointer correction, indicates success.
@@ -100,7 +110,14 @@ impl<T: Abomonation, S: DerefMut<Target=[u8]>> Abomonated<T, S> {
     }
 }
 
-impl<T: Abomonation, S: DerefMut<Target=[u8]>> Deref for Abomonated<T, S> {
+impl<T, S: DerefMut<Target=[u8]>> Abomonated<T, S> {
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.decoded
+    }
+}
+
+
+impl<T, S: DerefMut<Target=[u8]>> Deref for Abomonated<T, S> {
     type Target = T;
     #[inline]
     fn deref(&self) -> &T {
