@@ -3,16 +3,14 @@
 //! Abomonation takes typed elements and simply writes their contents as binary.
 //! It then gives the element the opportunity to serialize more data, which is
 //! useful for types with owned memory such as `String` and `Vec`.
-//! The result is effectively a copy of reachable memory, where pointers are zero-ed out and vector
-//! capacities are set to the vector length.
+//! The result is effectively a copy of reachable memory.
 //! Deserialization results in a shared reference to the type, pointing at the binary data itself.
 //!
 //! Abomonation does several unsafe things, and should ideally be used only through the methods
 //! `encode` and `decode` on types implementing the `Abomonation` trait. Implementing the
-//! `Abomonation` trait is highly discouraged, unless you use the `unsafe_abomonate!` macro, which
-//! is only mostly discouraged.
+//! `Abomonation` trait is highly discouraged; instead, you can use the [`abomonation_derive` crate](https://crates.io/crates/abomonation_derive).
 //!
-//! **Very important**: Abomonation reproduces the memory as laid out by the serializer, which can
+//! **Very important**: Abomonation reproduces the memory as laid out by the serializer, which will
 //! reveal architectural variations. Data encoded on a 32bit big-endian machine will not decode
 //! properly on a 64bit little-endian machine. Moreover, it could result in undefined behavior if
 //! the deserialization results in invalid typed data. Please do not do this.
@@ -46,10 +44,11 @@ pub mod abomonated;
 
 /// Encodes a typed reference into a binary buffer.
 ///
-/// `encode` will transmute `typed` to binary and write its contents to `bytes`. It then offers the
-/// element the opportunity to serialize more data. Having done that,
-/// it offers the element the opportunity to "tidy up", in which the element can erasing things
-/// like local memory addresses that it would be impolite to share.
+/// # Safety
+///
+/// This method is unsafe because it is unsafe to transmute typed allocations to binary.
+/// Furthermore, Rust currently indicates that it is undefined behavior to observe padding
+/// bytes, which will happen when we `memmcpy` structs which contain padding bytes.
 ///
 /// # Examples
 /// ```
@@ -85,13 +84,21 @@ pub unsafe fn encode<T: Abomonation, W: Write>(typed: &T, write: &mut W) -> IORe
 /// The return value is either a pair of the typed reference `&T` and the remaining `&mut [u8]`
 /// binary data, or `None` if decoding failed due to lack of data.
 ///
-/// #Safety
+/// # Safety
 ///
-/// `decode` is unsafe due to a number of unchecked invariants. Decoding arbitrary `&[u8]` data can
-/// result in invalid utf8 strings, enums with invalid discriminants, etc. `decode` does presently
+/// The `decode` method is unsafe due to a number of unchecked invariants.
+///
+/// Decoding arbitrary `&[u8]` data can
+/// result in invalid utf8 strings, enums with invalid discriminants, etc. `decode` *does*
 /// perform bounds checks, as part of determining if enough data are present to completely decode,
-/// and while it should only write to its `&mut [u8]` argument, invalid utf8 and enums are undefined
-/// behavior. Please do not decode data that was not encoded by the corresponding implementation.
+/// and while it should only write within the bounds of its `&mut [u8]` argument, the use of invalid
+/// utf8 and enums are undefined behavior.
+///
+/// Please do not decode data that was not encoded by the corresponding implementation.
+///
+/// In addition, `decode` does not ensure that the bytes representing types will be correctly aligned.
+/// On several platforms unaligned reads are undefined behavior, but on several other platforms they
+/// are only a performance penalty.
 ///
 /// # Examples
 /// ```
@@ -127,6 +134,10 @@ pub unsafe fn decode<T: Abomonation>(bytes: &mut [u8]) -> Option<(&T, &mut [u8])
 }
 
 /// Reports the number of bytes required to encode `self`.
+///
+/// # Safety
+///
+/// The `measure` method is safe. It neither produces nor consults serialized representations.
 #[inline]
 pub fn measure<T: Abomonation>(typed: &T) -> usize {
     mem::size_of::<T>() + typed.extent()
@@ -137,7 +148,7 @@ pub fn measure<T: Abomonation>(typed: &T) -> usize {
 /// The default implementations for Abomonation's methods are all empty. Many types have no owned
 /// data to transcribe. Some do, however, and need to carefully implement these unsafe methods.
 ///
-/// #Safety
+/// # Safety
 ///
 /// Abomonation has no safe methods. Please do not call them. They should be called only by
 /// `encode` and `decode`, each of which impose restrictions on ownership and lifetime of the data
@@ -490,7 +501,7 @@ impl<T: Abomonation> Abomonation for Box<T> {
     }
 }
 
-// currently enables UB, by exposing padding bytes
+// This method currently enables undefined behavior, by exposing padding bytes.
 #[inline] unsafe fn typed_to_bytes<T>(slice: &[T]) -> &[u8] {
     std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len() * mem::size_of::<T>())
 }
