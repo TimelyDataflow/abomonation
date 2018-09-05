@@ -18,7 +18,7 @@
 //! the deserialization results in invalid typed data. Please do not do this.
 //!
 //!
-//! #Examples
+//! # Examples
 //! ```
 //! use abomonation::{encode, decode};
 //!
@@ -51,7 +51,7 @@ pub mod abomonated;
 /// it offers the element the opportunity to "tidy up", in which the element can erasing things
 /// like local memory addresses that it would be impolite to share.
 ///
-/// #Examples
+/// # Examples
 /// ```
 /// use abomonation::{encode, decode};
 ///
@@ -93,7 +93,7 @@ pub unsafe fn encode<T: Abomonation, W: Write>(typed: &T, write: &mut W) -> IORe
 /// and while it should only write to its `&mut [u8]` argument, invalid utf8 and enums are undefined
 /// behavior. Please do not decode data that was not encoded by the corresponding implementation.
 ///
-/// #Examples
+/// # Examples
 /// ```
 /// use abomonation::{encode, decode};
 ///
@@ -159,18 +159,20 @@ pub trait Abomonation {
     #[inline(always)] unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> { Some(bytes) }
 
     /// Reports the number of further bytes required to entomb `self`.
-    #[inline(always)] fn extent(&self) -> usize { 0 }    
+    #[inline(always)] fn extent(&self) -> usize { 0 }
 }
 
 /// The `unsafe_abomonate!` macro takes a type name with an optional list of fields, and implements
 /// `Abomonation` for the type, following the pattern of the tuple implementations: each method
 /// calls the equivalent method on each of its fields.
 ///
-/// #Safety
+/// It is strongly recommended that you use the `abomonation_derive` crate instead of this macro.
+///
+/// # Safety
 /// `unsafe_abomonate` is unsafe because if you fail to specify a field it will not be properly
 /// re-initialized from binary data. This can leave you with a dangling pointer, or worse.
 ///
-/// #Examples
+/// # Examples
 /// ```
 /// #[macro_use]
 /// extern crate abomonation;
@@ -202,8 +204,9 @@ pub trait Abomonation {
 /// }
 /// ```
 #[macro_export]
+#[deprecated(since="0.5", note="please use the abomonation_derive crate")]
 macro_rules! unsafe_abomonate {
-    ($t:ty) => { 
+    ($t:ty) => {
         impl Abomonation for $t { }
     };
     ($t:ty : $($field:ident),*) => {
@@ -271,6 +274,8 @@ impl Abomonation for bool { }
 impl Abomonation for () { }
 
 impl Abomonation for char { }
+
+impl Abomonation for ::std::time::Duration { }
 
 impl<T> Abomonation for PhantomData<T> {}
 
@@ -358,7 +363,7 @@ macro_rules! array_abomonate {
             }
             #[inline(always)]
             unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
-                for element in self { 
+                for element in self {
                     let tmp = bytes; bytes = element.exhume(tmp)?;
                 }
                 Some(bytes)
@@ -428,40 +433,6 @@ impl Abomonation for String {
     }
 }
 
-// TODO: Code deactivated because 'c unbound; would not be safe for e.g. 'static.
-//
-// impl<'c> Abomonation for &'c str {
-//     #[inline]
-//     unsafe fn embalm(&mut self) {
-//         *self = std::str::from_utf8_unchecked(std::slice::from_raw_parts(EMPTY as *mut u8, self.len()));
-//     }
-//     #[inline]
-//     unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
-//
-//         // TODO : At the moment, this does not compile to a memcpy, 
-//         // due to Rust working around LLVM soundness bugs.
-//
-//         // bytes.write_all(self.as_bytes()).unwrap();
-//
-//         // TODO : Instead, we use the following hunk of code:
-//         let position = bytes.len();
-//         bytes.reserve(self.as_bytes().len());
-//         ::std::ptr::copy_nonoverlapping(self.as_bytes().as_ptr(), bytes.as_mut_ptr().offset(position as isize), self.as_bytes().len());
-//         bytes.set_len(position + self.as_bytes().len());
-//         // TODO : End hunk of replacement code
-//
-//     }
-//     #[inline]
-//     unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
-//         if self.len() > bytes.len() { None }
-//         else {
-//             let (mine, mut rest) = bytes.split_at_mut(self.len());
-//             *self = std::str::from_utf8_unchecked(std::slice::from_raw_parts_mut(mine.as_mut_ptr() as *mut u8, self.len()));
-//             Some(rest)
-//         }
-//     }
-// }
-
 impl<T: Abomonation> Abomonation for Vec<T> {
     #[inline]
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
@@ -486,7 +457,7 @@ impl<T: Abomonation> Abomonation for Vec<T> {
             Some(rest)
         }
     }
-    #[inline] 
+    #[inline]
     fn extent(&self) -> usize {
         let mut sum = mem::size_of::<T>() * self.len();
         for element in self.iter() {
@@ -495,51 +466,6 @@ impl<T: Abomonation> Abomonation for Vec<T> {
         sum
     }
 }
-
-// TODO: Code deactivated because 'c unbound; would not be safe for e.g. 'static.
-//
-// impl<'c, T: Abomonation> Abomonation for &'c [T] {
-//     #[inline]
-//     unsafe fn embalm(&mut self) {
-//         std::ptr::write(self, std::slice::from_raw_parts(EMPTY as *mut T, self.len()));
-//     }
-//     #[inline]
-//     unsafe fn entomb(&self, bytes: &mut Vec<u8>) {
-//         let position = bytes.len();
-//
-//         // TODO : At the moment, this does not compile to a memcpy, 
-//         // due to Rust working around LLVM soundness bugs.
-//
-//         // bytes.write_all(typed_to_bytes(self)).unwrap();
-//
-//         // TODO : Instead, we use the following hunk of code:
-//         let typed_bytes = typed_to_bytes(&self[..]);
-//         bytes.reserve(typed_bytes.len());
-//         ::std::ptr::copy_nonoverlapping(typed_bytes.as_ptr(), bytes.as_mut_ptr().offset(position as isize), typed_bytes.len());
-//         bytes.set_len(position + typed_bytes.len());
-//         // TODO : End hunk of replacement code
-//
-//         for element in bytes_to_typed::<T>(&mut bytes[position..], self.len()) { element.embalm(); }
-//         for element in self.iter() { element.entomb(bytes); }
-//     }
-//     #[inline]
-//     unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
-//
-//         // extract memory from bytes to back our slice
-//         let binary_len = self.len() * mem::size_of::<T>();
-//         if binary_len > bytes.len() { None }
-//         else {
-//             let (mine, mut rest) = bytes.split_at_mut(binary_len);
-//             let slice = std::slice::from_raw_parts_mut(mine.as_mut_ptr() as *mut T, self.len());
-//             for element in slice.iter_mut() {
-//                 let temp = rest;
-//                 rest = try_option!(element.exhume(temp));
-//             }
-//             *self = slice;
-//             Some(rest)
-//         }
-//     }
-// }
 
 impl<T: Abomonation> Abomonation for Box<T> {
     #[inline]
