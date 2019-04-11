@@ -505,3 +505,16 @@ impl<T: Abomonation> Abomonation for Box<T> {
 #[inline] unsafe fn typed_to_bytes<T>(slice: &[T]) -> &[u8] {
     std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len() * mem::size_of::<T>())
 }
+
+mod network {
+    use Abomonation;
+    use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, IpAddr, Ipv4Addr, Ipv6Addr};
+
+    impl Abomonation for IpAddr { }
+    impl Abomonation for Ipv4Addr { }
+    impl Abomonation for Ipv6Addr { }
+
+    impl Abomonation for SocketAddr { }
+    impl Abomonation for SocketAddrV4 { }
+    impl Abomonation for SocketAddrV6 { }
+}

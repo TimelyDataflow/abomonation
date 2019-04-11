@@ -133,3 +133,20 @@ fn test_multiple_encode_decode() {
     let (t, r) = unsafe { decode::<Vec<i32>>(r) }.unwrap(); assert!(*t == vec![1,2,3]);
     let (t, _r) = unsafe { decode::<String>(r) }.unwrap(); assert!(*t == "grawwwwrr".to_owned());
 }
+
+#[test]
+fn test_net_types() {
+
+    use std::net::{SocketAddr, IpAddr, Ipv4Addr, Ipv6Addr};
+
+    let socket_addr4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(128, 0, 0, 1)), 1234);
+    let socket_addr6 = SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 1234);
+
+    let mut bytes = Vec::new();
+
+    unsafe { encode(&socket_addr4, &mut bytes).unwrap(); }
+    unsafe { encode(&socket_addr6, &mut bytes).unwrap(); }
+
+    let (t, r) = unsafe { decode::<SocketAddr>(&mut bytes) }.unwrap(); assert!(*t == socket_addr4);
+    let (t, _r) = unsafe { decode::<SocketAddr>(r) }.unwrap(); assert!(*t == socket_addr6);
+}
