@@ -5,9 +5,8 @@ use abomonation::*;
 
 #[test] fn test_array() { _test_pass(vec![[0, 1, 2]; 1024]); }
 #[test] fn test_opt_vec() { _test_pass(vec![Some(vec![0,1,2]), None]); }
-// #[test] fn test_result_vec_str() { _test_pass(vec![Ok(vec![0, 1, 2]), Err("grawwwwrr!"), Ok(vec![])]); }
-// #[test] fn test_str_ref() { _test_pass(vec!["hi there"; 245]); }
 #[test] fn test_alignment() { _test_pass(vec![(format!("x"), vec![1,2,3]); 1024]); }
+#[test] fn test_alignment_128() { _test_pass(vec![(format!("x"), vec![1u128,2,3]); 1024]); }
 #[test] fn test_option_box_u64() { _test_pass(vec![Some(Box::new(0u64))]); }
 #[test] fn test_option_vec() { _test_pass(vec![Some(vec![0, 1, 2])]); }
 #[test] fn test_u32x4_pass() { _test_pass(vec![((1,2,3),vec![(0u32, 0u32, 0u32, 0u32); 1024])]); }
@@ -95,30 +94,6 @@ fn test_macro_size() {
     unsafe { encode(&record, &mut bytes).unwrap(); }
     assert_eq!(bytes.len(), measure(&record));
 }
-
-// #[derive(Eq, PartialEq)]
-// struct MyGenericStruct<T: Ord> {
-//     item: T
-// }
-
-// unsafe_abomonate!(T:Ord+Abomonation; MyStruct<T> : item);
-
-// #[test]
-// fn test_generic_macro() {
-//     // create some test data out of abomonation-approved types
-//     let record = MyGenericStruct{ item: "hello".to_owned() };
-
-//     // encode vector into a Vec<u8>
-//     let mut bytes = Vec::new();
-//     unsafe { encode(&record, &mut bytes); }
-
-//     // decode a &Vec<(u64, String)> from binary data
-//     if let Some((result, rest)) = unsafe { decode::<MyGenericStruct>(&mut bytes) } {
-//         assert!(result == &record);
-//         assert!(rest.len() == 0);
-//     }
-// }
-
 
 #[test]
 fn test_multiple_encode_decode() {
