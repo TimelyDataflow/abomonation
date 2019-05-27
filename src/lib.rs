@@ -39,6 +39,7 @@ use std::mem;       // yup, used pretty much everywhere.
 use std::io::Write; // for bytes.write_all; push_all is unstable and extend is slow.
 use std::io::Result as IOResult;
 use std::marker::PhantomData;
+use std::num::*;
 
 pub mod abomonated;
 
@@ -270,13 +271,29 @@ impl Abomonation for u8 { }
 impl Abomonation for u16 { }
 impl Abomonation for u32 { }
 impl Abomonation for u64 { }
+impl Abomonation for u128 { }
 impl Abomonation for usize { }
 
 impl Abomonation for i8 { }
 impl Abomonation for i16 { }
 impl Abomonation for i32 { }
 impl Abomonation for i64 { }
+impl Abomonation for i128 { }
 impl Abomonation for isize { }
+
+impl Abomonation for NonZeroU8 { }
+impl Abomonation for NonZeroU16 { }
+impl Abomonation for NonZeroU32 { }
+impl Abomonation for NonZeroU64 { }
+impl Abomonation for NonZeroU128 { }
+impl Abomonation for NonZeroUsize { }
+
+impl Abomonation for NonZeroI8 { }
+impl Abomonation for NonZeroI16 { }
+impl Abomonation for NonZeroI32 { }
+impl Abomonation for NonZeroI64 { }
+impl Abomonation for NonZeroI128 { }
+impl Abomonation for NonZeroIsize { }
 
 impl Abomonation for f32 { }
 impl Abomonation for f64 { }
