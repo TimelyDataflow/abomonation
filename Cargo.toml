@@ -1,14 +1,14 @@
 [package]
 name = "abomonation"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["Frank McSherry <fmcsherry@me.com>"]
 
 description = "A high performance and very unsafe serialization library"
 
 # These URLs point to more information about the repository
-documentation = "https://frankmcsherry.github.com/abomonation"
-homepage = "https://github.com/frankmcsherry/abomonation"
-repository = "https://github.com/frankmcsherry/abomonation.git"
+documentation = "https://docs.rs/abomonation/"
+homepage = "https://github.com/TimelyDataflow/abomonation"
+repository = "https://github.com/TimelyDataflow/abomonation.git"
 keywords = ["abomonation"]
 license = "MIT"
 
