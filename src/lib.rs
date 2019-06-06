@@ -288,12 +288,12 @@ impl Abomonation for NonZeroU64 { }
 impl Abomonation for NonZeroU128 { }
 impl Abomonation for NonZeroUsize { }
 
-impl Abomonation for NonZeroI8 { }
-impl Abomonation for NonZeroI16 { }
-impl Abomonation for NonZeroI32 { }
-impl Abomonation for NonZeroI64 { }
-impl Abomonation for NonZeroI128 { }
-impl Abomonation for NonZeroIsize { }
+#[cfg(feature = "nonzero")] impl Abomonation for NonZeroI8 { }
+#[cfg(feature = "nonzero")] impl Abomonation for NonZeroI16 { }
+#[cfg(feature = "nonzero")] impl Abomonation for NonZeroI32 { }
+#[cfg(feature = "nonzero")] impl Abomonation for NonZeroI64 { }
+#[cfg(feature = "nonzero")] impl Abomonation for NonZeroI128 { }
+#[cfg(feature = "nonzero")] impl Abomonation for NonZeroIsize { }
 
 impl Abomonation for f32 { }
 impl Abomonation for f64 { }
