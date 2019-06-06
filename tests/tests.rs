@@ -29,6 +29,12 @@ use abomonation::*;
 #[test] fn test_vec_u_s_size() { _test_size(vec![vec![(0u64, format!("grawwwwrr!")); 32]; 32]); }
 
 #[test]
+#[cfg(nonzero_signed)]
+fn test_nonzero_pass() {
+    _test_pass(vec![std::num::NonZeroIsize::new(1).unwrap(); 1024]);
+}
+
+#[test]
 fn test_phantom_data_for_non_abomonatable_type() {
     use std::marker::PhantomData;
     struct NotAbomonatable;
@@ -112,10 +118,10 @@ fn test_multiple_encode_decode() {
 #[test]
 fn test_net_types() {
 
-    use std::net::{SocketAddr, IpAddr, Ipv4Addr, Ipv6Addr};
+    use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 
     let socket_addr4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(128, 0, 0, 1)), 1234);
-    let socket_addr6 = SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 1234);
+    let socket_addr6 = SocketAddr::new(IpAddr::V6("::1".parse().unwrap()), 1234);
 
     let mut bytes = Vec::new();
 

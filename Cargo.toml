@@ -12,5 +12,10 @@ repository = "https://github.com/TimelyDataflow/abomonation.git"
 keywords = ["abomonation"]
 license = "MIT"
 
+build = "build.rs"
+
 [dev-dependencies]
 recycler="0.1.4"
+
+[build-dependencies]
+rustc_version = "0.2"
