@@ -1,9 +1,9 @@
-#[macro_use]
 extern crate abomonation;
 
 use abomonation::*;
 
 #[test] fn test_array() { _test_pass(vec![[0, 1, 2]; 1024]); }
+#[test] fn test_nonzero() { _test_pass(vec![[std::num::NonZeroI32::new(1)]; 1024]); }
 #[test] fn test_opt_vec() { _test_pass(vec![Some(vec![0,1,2]), None]); }
 #[test] fn test_alignment() { _test_pass(vec![(format!("x"), vec![1,2,3]); 1024]); }
 #[test] fn test_alignment_128() { _test_pass(vec![(format!("x"), vec![1u128,2,3]); 1024]); }
