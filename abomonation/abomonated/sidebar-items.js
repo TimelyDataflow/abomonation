@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Abomonated","A type wrapping owned decoded abomonated data."]]});
