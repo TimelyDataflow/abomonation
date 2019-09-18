@@ -265,12 +265,20 @@ macro_rules! tuple_abomonate {
                 $($ty.entomb(write)?;)*
                 Ok(())
             }
+
             #[allow(non_snake_case)]
             #[inline(always)] unsafe fn exhume<'a>(self_: NonNull<Self>, mut bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
-                let ($(ref mut $ty,)*) = *self;
-                $( let temp = bytes; bytes = $ty.exhume(temp)?; )*
+                // FIXME: This (briefly) constructs a "ref mut" to invalid data, which is UB.
+                //        I think avoiding this would require a cleaner way to iterate over tuple fields.
+                //        One possibility would be a C++11-style combination of variadic generics and recursion.
+                let ($(ref mut $ty,)*) = *self_.as_ptr();
+                $(
+                    let field_ptr : NonNull<$ty> = From::from($ty);
+                    bytes = $ty::exhume(field_ptr, bytes)?;
+                )*
                 Some(bytes)
             }
+
             #[allow(non_snake_case)]
             #[inline(always)] fn extent(&self) -> usize {
                 let mut size = 0;
