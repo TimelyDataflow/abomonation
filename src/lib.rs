@@ -525,17 +525,20 @@ impl<T: Abomonation> Abomonation for Box<T> {
         (**self).entomb(bytes)?;
         Ok(())
     }
+
     #[inline]
     unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
         let binary_len = mem::size_of::<T>();
         if binary_len > bytes.len() { None }
         else {
             let (mine, mut rest) = bytes.split_at_mut(binary_len);
-            std::ptr::write(self, mem::transmute(mine.as_mut_ptr() as *mut T));
-            let temp = rest; rest = (**self).exhume(temp)?;
+            let box_target : NonNull<T> = NonNull::new_unchecked(mine.as_mut_ptr() as *mut T);
+            rest = T::exhume(box_target, rest)?;
+            self_.as_ptr().write(Box::from_raw(box_target.as_ptr()));
             Some(rest)
         }
     }
+
     #[inline] fn extent(&self) -> usize {
         mem::size_of::<T>() + (&**self).extent()
     }
