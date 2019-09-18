@@ -40,6 +40,7 @@ use std::io::Write; // for bytes.write_all; push_all is unstable and extend is s
 use std::io::Result as IOResult;
 use std::marker::PhantomData;
 use std::num::*;
+use std::ptr::NonNull;
 
 pub mod abomonated;
 
@@ -124,9 +125,9 @@ pub unsafe fn decode<T: Abomonation>(bytes: &mut [u8]) -> Option<(&T, &mut [u8])
     if bytes.len() < mem::size_of::<T>() { None }
     else {
         let (split1, split2) = bytes.split_at_mut(mem::size_of::<T>());
-        let result: &mut T = mem::transmute(split1.get_unchecked_mut(0));
-        if let Some(remaining) = result.exhume(split2) {
-            Some((result, remaining))
+        let result: NonNull<T> = mem::transmute(split1.get_unchecked_mut(0));
+        if let Some(remaining) = T::exhume(result, split2) {
+            Some((&*result.as_ptr(), remaining))
         }
         else {
             None
@@ -165,10 +166,17 @@ pub trait Abomonation {
     /// reports any failures in writing to `write`.
     #[inline(always)] unsafe fn entomb<W: Write>(&self, _write: &mut W) -> IOResult<()> { Ok(()) }
 
-    /// Recover any information for `&mut self` not evident from its binary representation.
+    /// Recover any information for `self_` not evident from its binary representation.
     ///
     /// Most commonly this populates pointers with valid references into `bytes`.
-    #[inline(always)] unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> { Some(bytes) }
+    ///
+    /// Implementors should take note that `self_` is initially in an invalid state, as its inner
+    /// pointers may be dangling. As Rust references come with a data validity invariant, building
+    /// references to invalid state is undefined behavior, so one should strive to implement
+    /// `exhume` using raw pointer operations as much as feasible.
+    //
+    // FIXME: Replace self_ with self once Rust has arbitrary self types
+    #[inline(always)] unsafe fn exhume<'a>(_self_: NonNull<Self>, bytes: &'a mut [u8]) -> Option<&'a mut [u8]> { Some(bytes) }
 
     /// Reports the number of further bytes required to entomb `self`.
     #[inline(always)] fn extent(&self) -> usize { 0 }
@@ -227,7 +235,7 @@ macro_rules! unsafe_abomonate {
                 $( self.$field.entomb(write)?; )*
                 Ok(())
             }
-            #[inline] unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+            #[inline] unsafe fn exhume<'a>(self_: ::std::ptr::NonNull<Self>, mut bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
                 $( let temp = bytes; bytes = self.$field.exhume(temp)?; )*
                 Some(bytes)
             }
@@ -251,7 +259,7 @@ macro_rules! tuple_abomonate {
                 Ok(())
             }
             #[allow(non_snake_case)]
-            #[inline(always)] unsafe fn exhume<'a,'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+            #[inline(always)] unsafe fn exhume<'a>(self_: NonNull<Self>, mut bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
                 let ($(ref mut $name,)*) = *self;
                 $( let temp = bytes; bytes = $name.exhume(temp)?; )*
                 Some(bytes)
@@ -314,7 +322,7 @@ impl<T: Abomonation> Abomonation for Option<T> {
         }
         Ok(())
     }
-    #[inline(always)] unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
+    #[inline(always)] unsafe fn exhume<'a>(self_: NonNull<Self>, mut bytes: &'a mut[u8]) -> Option<&'a mut [u8]> {
         if let &mut Some(ref mut inner) = self {
             let tmp = bytes; bytes = inner.exhume(tmp)?;
         }
@@ -333,7 +341,7 @@ impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
         };
         Ok(())
     }
-    #[inline(always)] unsafe fn exhume<'a, 'b>(&'a mut self, bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
+    #[inline(always)] unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut[u8]) -> Option<&'a mut [u8]> {
         match self {
             &mut Ok(ref mut inner) => inner.exhume(bytes),
             &mut Err(ref mut inner) => inner.exhume(bytes),
@@ -390,7 +398,7 @@ macro_rules! array_abomonate {
                 Ok(())
             }
             #[inline(always)]
-            unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
+            unsafe fn exhume<'a>(self_: NonNull<Self>, mut bytes: &'a mut[u8]) -> Option<&'a mut [u8]> {
                 for element in self {
                     let tmp = bytes; bytes = element.exhume(tmp)?;
                 }
@@ -448,7 +456,7 @@ impl Abomonation for String {
         Ok(())
     }
     #[inline]
-    unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+    unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
         if self.len() > bytes.len() { None }
         else {
             let (mine, rest) = bytes.split_at_mut(self.len());
@@ -469,7 +477,7 @@ impl<T: Abomonation> Abomonation for Vec<T> {
         Ok(())
     }
     #[inline]
-    unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+    unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
 
         // extract memory from bytes to back our vector
         let binary_len = self.len() * mem::size_of::<T>();
@@ -503,7 +511,7 @@ impl<T: Abomonation> Abomonation for Box<T> {
         Ok(())
     }
     #[inline]
-    unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+    unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
         let binary_len = mem::size_of::<T>();
         if binary_len > bytes.len() { None }
         else {
