@@ -337,12 +337,17 @@ impl<T: Abomonation> Abomonation for Option<T> {
         }
         Ok(())
     }
+
     #[inline(always)] unsafe fn exhume<'a>(self_: NonNull<Self>, mut bytes: &'a mut[u8]) -> Option<&'a mut [u8]> {
-        if let &mut Some(ref mut inner) = self {
-            let tmp = bytes; bytes = inner.exhume(tmp)?;
+        // FIXME: This (briefly) constructs a "ref mut" to invalid data, which is UB.
+        //        I'm not sure if this can be fully resolved without relying on enum implementation details.
+        if let Some(ref mut inner) = *self_.as_ptr() {
+            let inner_ptr : NonNull<T> = From::from(inner);
+            bytes = T::exhume(inner_ptr, bytes)?;
         }
         Some(bytes)
     }
+
     #[inline] fn extent(&self) -> usize {
         self.as_ref().map(|inner| inner.extent()).unwrap_or(0)
     }
@@ -356,12 +361,22 @@ impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
         };
         Ok(())
     }
+
     #[inline(always)] unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut[u8]) -> Option<&'a mut [u8]> {
-        match self {
-            &mut Ok(ref mut inner) => inner.exhume(bytes),
-            &mut Err(ref mut inner) => inner.exhume(bytes),
+        // FIXME: This (briefly) constructs a "ref mut" to invalid data, which is UB.
+        //        I'm not sure if this can be fully resolved without relying on enum implementation details.
+        match *self_.as_ptr() {
+            Ok(ref mut inner) => {
+                let inner_ptr : NonNull<T> = From::from(inner);
+                T::exhume(inner_ptr, bytes)
+            }
+            Err(ref mut inner) => {
+                let inner_ptr : NonNull<E> = From::from(inner);
+                E::exhume(inner_ptr, bytes)
+            }
         }
     }
+
     #[inline] fn extent(&self) -> usize {
         match self {
             &Ok(ref inner) => inner.extent(),
