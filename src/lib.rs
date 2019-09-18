@@ -235,10 +235,17 @@ macro_rules! unsafe_abomonate {
                 $( self.$field.entomb(write)?; )*
                 Ok(())
             }
+
             #[inline] unsafe fn exhume<'a>(self_: ::std::ptr::NonNull<Self>, mut bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
-                $( let temp = bytes; bytes = self.$field.exhume(temp)?; )*
+                $(
+                    // FIXME: This (briefly) constructs an &mut _ to invalid data, which is UB.
+                    //        The proposed &raw mut operator would allow avoiding this.
+                    let field_ptr: ::std::ptr::NonNull<_> = From::from(&mut (*self_.as_ptr()).$field);
+                    bytes = Abomonation::exhume(field_ptr, bytes)?;
+                )*
                 Some(bytes)
             }
+
             #[inline] fn extent(&self) -> usize {
                 let mut size = 0;
                 $( size += self.$field.extent(); )*
