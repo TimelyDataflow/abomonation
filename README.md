@@ -3,7 +3,7 @@ A mortifying serialization library for Rust
 
 Abomonation (spelling intentional) is a serialization library for Rust based on the very simple idea that if someone presents data for serialization it will copy those exact bits, and then follow any pointers and copy those bits, and so on. When deserializing it recovers the exact bits, and then corrects pointers to aim at the serialized forms of the chased data.
 
-**Warning**: Abomonation should not be used on any data you care strongly about, or from any computer you value the data on. The `encode` and `decode` methods do things that may be undefined behavior, and you shouldn't stand for that. Specifically, `encode` exposes padding bytes to `memcpy`, and `decode` doesn't much respect alignment.
+**Warning**: Abomonation should not be used on any data you care strongly about, or from any computer you value the data on. The `encode` and `decode` methods do things that may be undefined behavior, and you shouldn't stand for that. Specifically, `encode` exposes padding bytes to `memcpy`, and `decode` doesn't much respect alignment and may need to construct Rust references to invalid data.
 
 Please consult the [abomonation documentation](https://frankmcsherry.github.com/abomonation) for more specific information.
 
