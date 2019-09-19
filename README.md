@@ -49,7 +49,7 @@ Be warned that these numbers are not *goodput*, but rather the total number of b
 
 ## unsafe_abomonate!
 
-Abomonation comes with the `unsafe_abomonate!` macro implementing `Abomonation` for structs which are essentially equivalent to a tuple of other `Abomonable` types. To use the macro, you must put the `#[macro_use]` modifier before `extern crate abomonation;`.
+Abomonation comes with the `unsafe_abomonate!` macro implementing `Abomonation` for structs which are essentially equivalent to a tuple of other `Abomonation` types. To use the macro, you must put the `#[macro_use]` modifier before `extern crate abomonation;`.
 
 Please note that `unsafe_abomonate!` synthesizes unsafe implementations of `Abomonation`, and it is should be considered unsafe to invoke.
 
@@ -82,4 +82,4 @@ if let Some((result, remaining)) = unsafe { decode::<MyStruct>(&mut bytes) } {
 }
 ```
 
-Be warned that implementing `Abomonable` for types can be a giant disaster and is entirely discouraged.
+Be warned that implementing `Abomonation` for types can be a giant disaster and is entirely discouraged.
