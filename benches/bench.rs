@@ -40,7 +40,7 @@ fn _bench_enc<T: Abomonation>(bencher: &mut Bencher, record: T) {
     bencher.bytes = bytes.len() as u64;
     bencher.iter(|| {
         bytes.clear();
-        unsafe { encode(&record, &mut bytes).unwrap(); }
+        unsafe { encode(&record, &mut bytes).unwrap() }
     });
 }
 
