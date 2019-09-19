@@ -424,22 +424,16 @@ macro_rules! array_abomonate {
         impl<T: Abomonation> Abomonation for [T; $size] {
             #[inline(always)]
             unsafe fn entomb<W: Write>(&self, write: &mut W) ->  IOResult<()> {
-                for element in self { element.entomb(write)?; }
-                Ok(())
+                entomb_slice(&self[..], write)
             }
+
             #[inline(always)]
-            unsafe fn exhume<'a>(self_: NonNull<Self>, mut bytes: &'a mut[u8]) -> Option<&'a mut [u8]> {
-                for element in self {
-                    let tmp = bytes; bytes = element.exhume(tmp)?;
-                }
-                Some(bytes)
+            unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut[u8]) -> Option<&'a mut [u8]> {
+                exhume_slice(self_.as_ptr() as *mut T, $size, bytes)
             }
+
             #[inline(always)] fn extent(&self) -> usize {
-                let mut size = 0;
-                for element in self {
-                    size += element.extent();
-                }
-                size
+                slice_extent(&self[..])
             }
         }
     )
@@ -485,15 +479,20 @@ impl Abomonation for String {
         write.write_all(self.as_bytes())?;
         Ok(())
     }
+
     #[inline]
     unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
-        if self.len() > bytes.len() { None }
+        // FIXME: This (briefly) constructs an &String to invalid data, which is UB.
+        //        I'm not sure if this can be fully resolved without relying on String implementation details.
+        let self_len = self_.as_ref().len();
+        if self_len > bytes.len() { None }
         else {
-            let (mine, rest) = bytes.split_at_mut(self.len());
-            std::ptr::write(self, String::from_raw_parts(mem::transmute(mine.as_ptr()), self.len(), self.len()));
+            let (mine, rest) = bytes.split_at_mut(self_len);
+            self_.as_ptr().write(String::from_raw_parts(mine.as_mut_ptr(), self_len, self_len));
             Some(rest)
         }
     }
+
     #[inline] fn extent(&self) -> usize {
         self.len()
     }
@@ -503,33 +502,28 @@ impl<T: Abomonation> Abomonation for Vec<T> {
     #[inline]
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         write.write_all(typed_to_bytes(&self[..]))?;
-        for element in self.iter() { element.entomb(write)?; }
-        Ok(())
+        entomb_slice(&self[..], write)
     }
+
     #[inline]
     unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
-
-        // extract memory from bytes to back our vector
-        let binary_len = self.len() * mem::size_of::<T>();
+        // FIXME: This (briefly) constructs an &Vec<T> to invalid data, which is UB.
+        //        I'm not sure if this can be fully resolved without relying on Vec implementation details.
+        let self_len = self_.as_ref().len();
+        let binary_len = self_len * mem::size_of::<T>();
         if binary_len > bytes.len() { None }
         else {
             let (mine, mut rest) = bytes.split_at_mut(binary_len);
-            let slice = std::slice::from_raw_parts_mut(mine.as_mut_ptr() as *mut T, self.len());
-            std::ptr::write(self, Vec::from_raw_parts(slice.as_mut_ptr(), self.len(), self.len()));
-            for element in self.iter_mut() {
-                let temp = rest;             // temp variable explains lifetimes (mysterious!)
-                rest = element.exhume(temp)?;
-            }
+            let first_ptr = mine.as_mut_ptr() as *mut T;
+            rest = exhume_slice(first_ptr, self_len, rest)?;
+            self_.as_ptr().write(Vec::from_raw_parts(first_ptr, self_len, self_len));
             Some(rest)
         }
     }
+
     #[inline]
     fn extent(&self) -> usize {
-        let mut sum = mem::size_of::<T>() * self.len();
-        for element in self.iter() {
-            sum += element.extent();
-        }
-        sum
+        mem::size_of::<T>() * self.len() + slice_extent(&self[..])
     }
 }
 
@@ -562,6 +556,28 @@ impl<T: Abomonation> Abomonation for Box<T> {
 // This method currently enables undefined behavior, by exposing padding bytes.
 #[inline] unsafe fn typed_to_bytes<T>(slice: &[T]) -> &[u8] {
     std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len() * mem::size_of::<T>())
+}
+
+// Common subset of "entomb" for all [T]-like types
+unsafe fn entomb_slice<T: Abomonation, W: Write>(slice: &[T], write: &mut W) ->  IOResult<()> {
+    for element in slice { element.entomb(write)?; }
+    Ok(())
+}
+
+// Common subset of "exhume" for all [T]-like types
+// (I'd gladly take a NonNull<[T]>, but it is too difficult to build raw pointers to slices)
+#[inline]
+unsafe fn exhume_slice<'a, T: Abomonation>(first_ptr: *mut T, length: usize, mut bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
+    for i in 0..length {
+        let element_ptr: NonNull<T> = NonNull::new_unchecked(first_ptr.add(i));
+        bytes = T::exhume(element_ptr, bytes)?;
+    }
+    Some(bytes)
+}
+
+// Common subset of "extent" for all [T]-like types
+fn slice_extent<T: Abomonation>(slice: &[T]) -> usize {
+    slice.iter().map(T::extent).sum()
 }
 
 mod network {
