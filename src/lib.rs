@@ -149,14 +149,28 @@ pub fn measure<T: Abomonation>(typed: &T) -> usize {
 ///
 /// # Safety
 ///
-/// Abomonation has no safe methods. Please do not call them. They should be called only by
+/// `entomb` and `exhume` are not meant to be called directly. They should be called only by
 /// `encode` and `decode`, each of which impose restrictions on ownership and lifetime of the data
-/// they take as input and return as output.
+/// they take as input and return as output, thus improving safety.
+///
+/// Not all Rust types are abomonable, and one should think carefully about the implications of
+/// implementing `Abomonation` for a type. To lend itself to this exercise, a type must...
+///
+/// - Provide exhaustive access to its internal representation
+/// - Allow reconstruction from said representation
+/// - Survive having its heap allocations being silently replaced by inline pointers to
+///   the same storage block, as long as only a shared reference is observed.
+///
+/// The last point is the reason why `Abomonation` only provides a shared reference to the
+/// reconstructed object. Without this, it would be trivial to trigger, say, a `Box` destructor
+/// that tries to call `free()` on the inner pointer. But the use of a shared reference only
+/// provides minimal sanity, and for types with internal mutability (those with an `UnsafeCell`
+/// inside), this precaution is insufficient. `Abomonation` is generally not safely implementable
+/// for such types, but may work in particular cases like atomics.
 ///
 /// If you are concerned about safety, it may be best to avoid Abomonation all together. It does
 /// several things that may be undefined behavior, depending on how undefined behavior is defined.
-pub trait Abomonation {
-
+pub unsafe trait Abomonation {
     /// Write any additional information about `&self` beyond its binary representation.
     ///
     /// Most commonly this is owned data on the other end of pointers in `&self`. The return value
@@ -224,10 +238,10 @@ pub trait Abomonation {
 #[deprecated(since="0.5", note="please use the abomonation_derive crate")]
 macro_rules! unsafe_abomonate {
     ($t:ty) => {
-        impl Abomonation for $t { }
+        unsafe impl Abomonation for $t { }
     };
     ($t:ty : $($field:ident),*) => {
-        impl Abomonation for $t {
+        unsafe impl Abomonation for $t {
             unsafe fn entomb<W: ::std::io::Write>(&self, write: &mut W) -> ::std::io::Result<()> {
                 $( self.$field.entomb(write)?; )*
                 Ok(())
@@ -255,7 +269,7 @@ macro_rules! unsafe_abomonate {
 // general code for tuples (can't use '0', '1', ... as field identifiers)
 macro_rules! tuple_abomonate {
     ( $($ty:ident)+) => (
-        impl<$($ty: Abomonation),*> Abomonation for ($($ty,)*) {
+        unsafe impl<$($ty: Abomonation),*> Abomonation for ($($ty,)*) {
             #[allow(non_snake_case)]
             unsafe fn entomb<WRITE: Write>(&self, write: &mut WRITE) -> IOResult<()> {
                 let ($(ref $ty,)*) = *self;
@@ -287,47 +301,47 @@ macro_rules! tuple_abomonate {
     );
 }
 
-impl Abomonation for u8 { }
-impl Abomonation for u16 { }
-impl Abomonation for u32 { }
-impl Abomonation for u64 { }
-impl Abomonation for u128 { }
-impl Abomonation for usize { }
+unsafe impl Abomonation for u8 { }
+unsafe impl Abomonation for u16 { }
+unsafe impl Abomonation for u32 { }
+unsafe impl Abomonation for u64 { }
+unsafe impl Abomonation for u128 { }
+unsafe impl Abomonation for usize { }
 
-impl Abomonation for i8 { }
-impl Abomonation for i16 { }
-impl Abomonation for i32 { }
-impl Abomonation for i64 { }
-impl Abomonation for i128 { }
-impl Abomonation for isize { }
+unsafe impl Abomonation for i8 { }
+unsafe impl Abomonation for i16 { }
+unsafe impl Abomonation for i32 { }
+unsafe impl Abomonation for i64 { }
+unsafe impl Abomonation for i128 { }
+unsafe impl Abomonation for isize { }
 
-impl Abomonation for NonZeroU8 { }
-impl Abomonation for NonZeroU16 { }
-impl Abomonation for NonZeroU32 { }
-impl Abomonation for NonZeroU64 { }
-impl Abomonation for NonZeroU128 { }
-impl Abomonation for NonZeroUsize { }
+unsafe impl Abomonation for NonZeroU8 { }
+unsafe impl Abomonation for NonZeroU16 { }
+unsafe impl Abomonation for NonZeroU32 { }
+unsafe impl Abomonation for NonZeroU64 { }
+unsafe impl Abomonation for NonZeroU128 { }
+unsafe impl Abomonation for NonZeroUsize { }
 
-impl Abomonation for NonZeroI8 { }
-impl Abomonation for NonZeroI16 { }
-impl Abomonation for NonZeroI32 { }
-impl Abomonation for NonZeroI64 { }
-impl Abomonation for NonZeroI128 { }
-impl Abomonation for NonZeroIsize { }
+unsafe impl Abomonation for NonZeroI8 { }
+unsafe impl Abomonation for NonZeroI16 { }
+unsafe impl Abomonation for NonZeroI32 { }
+unsafe impl Abomonation for NonZeroI64 { }
+unsafe impl Abomonation for NonZeroI128 { }
+unsafe impl Abomonation for NonZeroIsize { }
 
-impl Abomonation for f32 { }
-impl Abomonation for f64 { }
+unsafe impl Abomonation for f32 { }
+unsafe impl Abomonation for f64 { }
 
-impl Abomonation for bool { }
-impl Abomonation for () { }
+unsafe impl Abomonation for bool { }
+unsafe impl Abomonation for () { }
 
-impl Abomonation for char { }
+unsafe impl Abomonation for char { }
 
-impl Abomonation for ::std::time::Duration { }
+unsafe impl Abomonation for ::std::time::Duration { }
 
-impl<T> Abomonation for PhantomData<T> {}
+unsafe impl<T> Abomonation for PhantomData<T> {}
 
-impl<T: Abomonation> Abomonation for Option<T> {
+unsafe impl<T: Abomonation> Abomonation for Option<T> {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         if let &Some(ref inner) = self {
             inner.entomb(write)?;
@@ -350,7 +364,7 @@ impl<T: Abomonation> Abomonation for Option<T> {
     }
 }
 
-impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
+unsafe impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         match self {
             &Ok(ref inner) => inner.entomb(write),
@@ -416,7 +430,7 @@ tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD
 
 macro_rules! array_abomonate {
     ($size:expr) => (
-        impl<T: Abomonation> Abomonation for [T; $size] {
+        unsafe impl<T: Abomonation> Abomonation for [T; $size] {
             unsafe fn entomb<W: Write>(&self, write: &mut W) ->  IOResult<()> {
                 entomb_slice(&self[..], write)
             }
@@ -466,7 +480,7 @@ array_abomonate!(30);
 array_abomonate!(31);
 array_abomonate!(32);
 
-impl Abomonation for String {
+unsafe impl Abomonation for String {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         write.write_all(self.as_bytes())
     }
@@ -489,7 +503,7 @@ impl Abomonation for String {
     }
 }
 
-impl<T: Abomonation> Abomonation for Vec<T> {
+unsafe impl<T: Abomonation> Abomonation for Vec<T> {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         write.write_all(typed_to_bytes(&self[..]))?;
         entomb_slice(&self[..], write)
@@ -516,7 +530,7 @@ impl<T: Abomonation> Abomonation for Vec<T> {
     }
 }
 
-impl<T: Abomonation> Abomonation for Box<T> {
+unsafe impl<T: Abomonation> Abomonation for Box<T> {
     unsafe fn entomb<W: Write>(&self, bytes: &mut W) -> IOResult<()> {
         bytes.write_all(std::slice::from_raw_parts(mem::transmute(&**self), mem::size_of::<T>()))?;
         (**self).entomb(bytes)
@@ -570,11 +584,11 @@ mod network {
     use Abomonation;
     use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, IpAddr, Ipv4Addr, Ipv6Addr};
 
-    impl Abomonation for IpAddr { }
-    impl Abomonation for Ipv4Addr { }
-    impl Abomonation for Ipv6Addr { }
+    unsafe impl Abomonation for IpAddr { }
+    unsafe impl Abomonation for Ipv4Addr { }
+    unsafe impl Abomonation for Ipv6Addr { }
 
-    impl Abomonation for SocketAddr { }
-    impl Abomonation for SocketAddrV4 { }
-    impl Abomonation for SocketAddrV6 { }
+    unsafe impl Abomonation for SocketAddr { }
+    unsafe impl Abomonation for SocketAddrV4 { }
+    unsafe impl Abomonation for SocketAddrV6 { }
 }
