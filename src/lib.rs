@@ -72,10 +72,10 @@ pub mod abomonated;
 /// ```
 ///
 #[inline(always)]
-pub unsafe fn encode<T: Abomonation, W: Write>(typed: &T, write: &mut W) -> IOResult<()> {
+pub unsafe fn encode<T: Abomonation, W: Write>(typed: &T, mut write: W) -> IOResult<()> {
     let slice = std::slice::from_raw_parts(mem::transmute(typed), mem::size_of::<T>());
     write.write_all(slice)?;
-    typed.entomb(write)
+    typed.entomb(&mut write)
 }
 
 /// Decodes a mutable binary slice into an immutable typed reference.
