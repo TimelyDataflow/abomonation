@@ -531,9 +531,9 @@ unsafe impl<T: Abomonation> Abomonation for Vec<T> {
 }
 
 unsafe impl<T: Abomonation> Abomonation for Box<T> {
-    unsafe fn entomb<W: Write>(&self, bytes: &mut W) -> IOResult<()> {
-        bytes.write_all(std::slice::from_raw_parts(mem::transmute(&**self), mem::size_of::<T>()))?;
-        T::entomb(&**self, bytes)
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+        write.write_all(typed_to_bytes(std::slice::from_ref(&**self)))?;
+        T::entomb(&**self, write)
     }
 
     unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
