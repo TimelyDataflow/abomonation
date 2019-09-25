@@ -257,25 +257,25 @@ macro_rules! unsafe_abomonate {
 
 // general code for tuples (can't use '0', '1', ... as field identifiers)
 macro_rules! tuple_abomonate {
-    ( $($name:ident)+) => (
-        impl<$($name: Abomonation),*> Abomonation for ($($name,)*) {
+    ( $($ty:ident)+) => (
+        impl<$($ty: Abomonation),*> Abomonation for ($($ty,)*) {
             #[allow(non_snake_case)]
             #[inline(always)] unsafe fn entomb<WRITE: Write>(&self, write: &mut WRITE) -> IOResult<()> {
-                let ($(ref $name,)*) = *self;
-                $($name.entomb(write)?;)*
+                let ($(ref $ty,)*) = *self;
+                $($ty.entomb(write)?;)*
                 Ok(())
             }
             #[allow(non_snake_case)]
             #[inline(always)] unsafe fn exhume<'a>(self_: NonNull<Self>, mut bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
-                let ($(ref mut $name,)*) = *self;
-                $( let temp = bytes; bytes = $name.exhume(temp)?; )*
+                let ($(ref mut $ty,)*) = *self;
+                $( let temp = bytes; bytes = $ty.exhume(temp)?; )*
                 Some(bytes)
             }
             #[allow(non_snake_case)]
             #[inline(always)] fn extent(&self) -> usize {
                 let mut size = 0;
-                let ($(ref $name,)*) = *self;
-                $( size += $name.extent(); )*
+                let ($(ref $ty,)*) = *self;
+                $( size += $ty.extent(); )*
                 size
             }
         }
