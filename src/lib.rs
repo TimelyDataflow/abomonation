@@ -75,7 +75,7 @@ pub mod abomonated;
 pub unsafe fn encode<T: Abomonation, W: Write>(typed: &T, mut write: W) -> IOResult<()> {
     let slice = std::slice::from_raw_parts(mem::transmute(typed), mem::size_of::<T>());
     write.write_all(slice)?;
-    typed.entomb(&mut write)
+    T::entomb(typed, &mut write)
 }
 
 /// Decodes a mutable binary slice into an immutable typed reference.
@@ -139,7 +139,7 @@ pub unsafe fn decode<T: Abomonation>(bytes: &mut [u8]) -> Option<(&T, &mut [u8])
 ///
 /// The `measure` method is safe. It neither produces nor consults serialized representations.
 pub fn measure<T: Abomonation>(typed: &T) -> usize {
-    mem::size_of::<T>() + typed.extent()
+    mem::size_of::<T>() + T::extent(&typed)
 }
 
 /// Abomonation provides methods to serialize any heap data the implementor owns.
@@ -243,7 +243,7 @@ macro_rules! unsafe_abomonate {
     ($t:ty : $($field:ident),*) => {
         unsafe impl Abomonation for $t {
             unsafe fn entomb<W: ::std::io::Write>(&self, write: &mut W) -> ::std::io::Result<()> {
-                $( self.$field.entomb(write)?; )*
+                $( Abomonation::entomb(&self.$field, write)?; )*
                 Ok(())
             }
 
@@ -259,7 +259,7 @@ macro_rules! unsafe_abomonate {
 
             fn extent(&self) -> usize {
                 let mut size = 0;
-                $( size += self.$field.extent(); )*
+                $( size += Abomonation::extent(&self.$field); )*
                 size
             }
         }
@@ -273,7 +273,7 @@ macro_rules! tuple_abomonate {
             #[allow(non_snake_case)]
             unsafe fn entomb<WRITE: Write>(&self, write: &mut WRITE) -> IOResult<()> {
                 let ($(ref $ty,)*) = *self;
-                $( $ty.entomb(write)?; )*
+                $( $ty::entomb($ty, write)?; )*
                 Ok(())
             }
 
@@ -294,7 +294,7 @@ macro_rules! tuple_abomonate {
             fn extent(&self) -> usize {
                 let mut size = 0;
                 let ($(ref $ty,)*) = *self;
-                $( size += $ty.extent(); )*
+                $( size += $ty::extent($ty); )*
                 size
             }
         }
@@ -344,7 +344,7 @@ unsafe impl<T> Abomonation for PhantomData<T> {}
 unsafe impl<T: Abomonation> Abomonation for Option<T> {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         if let &Some(ref inner) = self {
-            inner.entomb(write)?;
+            T::entomb(inner, write)?;
         }
         Ok(())
     }
@@ -360,15 +360,15 @@ unsafe impl<T: Abomonation> Abomonation for Option<T> {
     }
 
     fn extent(&self) -> usize {
-        self.as_ref().map(|inner| inner.extent()).unwrap_or(0)
+        self.as_ref().map(T::extent).unwrap_or(0)
     }
 }
 
 unsafe impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         match self {
-            &Ok(ref inner) => inner.entomb(write),
-            &Err(ref inner) => inner.entomb(write),
+            &Ok(ref inner) => T::entomb(inner, write),
+            &Err(ref inner) => E::entomb(inner, write),
         }
     }
 
@@ -389,8 +389,8 @@ unsafe impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
 
     fn extent(&self) -> usize {
         match self {
-            &Ok(ref inner) => inner.extent(),
-            &Err(ref inner) => inner.extent(),
+            &Ok(ref inner) => T::extent(inner),
+            &Err(ref inner) => E::extent(inner),
         }
     }
 }
@@ -533,7 +533,7 @@ unsafe impl<T: Abomonation> Abomonation for Vec<T> {
 unsafe impl<T: Abomonation> Abomonation for Box<T> {
     unsafe fn entomb<W: Write>(&self, bytes: &mut W) -> IOResult<()> {
         bytes.write_all(std::slice::from_raw_parts(mem::transmute(&**self), mem::size_of::<T>()))?;
-        (**self).entomb(bytes)
+        T::entomb(&**self, bytes)
     }
 
     unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
@@ -549,7 +549,7 @@ unsafe impl<T: Abomonation> Abomonation for Box<T> {
     }
 
     fn extent(&self) -> usize {
-        mem::size_of::<T>() + (&**self).extent()
+        mem::size_of::<T>() + T::extent(&**self)
     }
 }
 
@@ -560,7 +560,7 @@ unsafe fn typed_to_bytes<T>(slice: &[T]) -> &[u8] {
 
 // Common subset of "entomb" for all [T]-like types
 unsafe fn entomb_slice<T: Abomonation, W: Write>(slice: &[T], write: &mut W) ->  IOResult<()> {
-    for element in slice { element.entomb(write)?; }
+    for element in slice { T::entomb(element, write)?; }
     Ok(())
 }
 
