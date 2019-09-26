@@ -3,7 +3,7 @@ A mortifying serialization library for Rust
 
 Abomonation (spelling intentional) is a serialization library for Rust based on the very simple idea that if someone presents data for serialization it will copy those exact bits, and then follow any pointers and copy those bits, and so on. When deserializing it recovers the exact bits, and then corrects pointers to aim at the serialized forms of the chased data.
 
-**Warning**: Abomonation should not be used on any data you care strongly about, or from any computer you value the data on. The `encode` and `decode` methods do things that may be undefined behavior, and you shouldn't stand for that. Specifically, `encode` exposes padding bytes to `memcpy`, and `decode` doesn't much respect alignment.
+**Warning**: Abomonation should not be used on any data you care strongly about, or from any computer you value the data on. The `encode` and `decode` methods do things that may be undefined behavior, and you shouldn't stand for that. Specifically, `encode` exposes padding bytes to `memcpy`, and `decode` doesn't much respect alignment and may need to construct Rust references to invalid data.
 
 Please consult the [abomonation documentation](https://frankmcsherry.github.com/abomonation) for more specific information.
 
@@ -49,7 +49,7 @@ Be warned that these numbers are not *goodput*, but rather the total number of b
 
 ## unsafe_abomonate!
 
-Abomonation comes with the `unsafe_abomonate!` macro implementing `Abomonation` for structs which are essentially equivalent to a tuple of other `Abomonable` types. To use the macro, you must put the `#[macro_use]` modifier before `extern crate abomonation;`.
+Abomonation comes with the `unsafe_abomonate!` macro implementing `Abomonation` for structs which are essentially equivalent to a tuple of other `Abomonation` types. To use the macro, you must put the `#[macro_use]` modifier before `extern crate abomonation;`.
 
 Please note that `unsafe_abomonate!` synthesizes unsafe implementations of `Abomonation`, and it is should be considered unsafe to invoke.
 
@@ -82,4 +82,4 @@ if let Some((result, remaining)) = unsafe { decode::<MyStruct>(&mut bytes) } {
 }
 ```
 
-Be warned that implementing `Abomonable` for types can be a giant disaster and is entirely discouraged.
+Be warned that implementing `Abomonation` for types can be a giant disaster and is entirely discouraged.

@@ -1,6 +1,7 @@
 extern crate abomonation;
 
 use abomonation::*;
+use std::fmt::Debug;
 
 #[test] fn test_array() { _test_pass(vec![[0, 1, 2]; 1024]); }
 #[test] fn test_nonzero() { _test_pass(vec![[std::num::NonZeroI32::new(1)]; 1024]); }
@@ -38,21 +39,21 @@ fn test_phantom_data_for_non_abomonatable_type() {
     _test_pass(PhantomData::<NotAbomonatable>::default());
 }
 
-fn _test_pass<T: Abomonation+Eq>(record: T) {
+fn _test_pass<T: Abomonation+Debug+Eq>(record: T) {
     let mut bytes = Vec::new();
     unsafe { encode(&record, &mut bytes).unwrap(); }
     {
         let (result, rest) = unsafe { decode::<T>(&mut bytes[..]) }.unwrap();
-        assert!(&record == result);
-        assert!(rest.len() == 0);
+        assert_eq!(&record, result);
+        assert_eq!(rest.len(), 0);
     }
 }
 
-fn _test_fail<T: Abomonation>(record: T) {
+fn _test_fail<T: Abomonation+Debug+Eq>(record: T) {
     let mut bytes = Vec::new();
     unsafe { encode(&record, &mut bytes).unwrap(); }
     bytes.pop();
-    assert!(unsafe { decode::<T>(&mut bytes[..]) }.is_none());
+    assert_eq!(unsafe { decode::<T>(&mut bytes[..]) }, None);
 }
 
 fn _test_size<T: Abomonation>(record: T) {
@@ -62,7 +63,7 @@ fn _test_size<T: Abomonation>(record: T) {
 }
 
 
-#[derive(Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 struct MyStruct {
     a: String,
     b: u64,
@@ -82,8 +83,8 @@ fn test_macro() {
 
     // decode a &Vec<(u64, String)> from binary data
     if let Some((result, rest)) = unsafe { decode::<MyStruct>(&mut bytes) } {
-        assert!(result == &record);
-        assert!(rest.len() == 0);
+        assert_eq!(result, &record);
+        assert_eq!(rest.len(), 0);
     }
 }
 
@@ -106,10 +107,10 @@ fn test_multiple_encode_decode() {
     unsafe { encode(&vec![1,2,3], &mut bytes).unwrap(); }
     unsafe { encode(&"grawwwwrr".to_owned(), &mut bytes).unwrap(); }
 
-    let (t, r) = unsafe { decode::<u32>(&mut bytes) }.unwrap(); assert!(*t == 0);
-    let (t, r) = unsafe { decode::<u64>(r) }.unwrap(); assert!(*t == 7);
-    let (t, r) = unsafe { decode::<Vec<i32>>(r) }.unwrap(); assert!(*t == vec![1,2,3]);
-    let (t, _r) = unsafe { decode::<String>(r) }.unwrap(); assert!(*t == "grawwwwrr".to_owned());
+    let (t, r) = unsafe { decode::<u32>(&mut bytes) }.unwrap(); assert_eq!(*t, 0);
+    let (t, r) = unsafe { decode::<u64>(r) }.unwrap(); assert_eq!(*t, 7);
+    let (t, r) = unsafe { decode::<Vec<i32>>(r) }.unwrap(); assert_eq!(*t, vec![1,2,3]);
+    let (t, _r) = unsafe { decode::<String>(r) }.unwrap(); assert_eq!(*t, "grawwwwrr".to_owned());
 }
 
 #[test]
@@ -125,6 +126,6 @@ fn test_net_types() {
     unsafe { encode(&socket_addr4, &mut bytes).unwrap(); }
     unsafe { encode(&socket_addr6, &mut bytes).unwrap(); }
 
-    let (t, r) = unsafe { decode::<SocketAddr>(&mut bytes) }.unwrap(); assert!(*t == socket_addr4);
-    let (t, _r) = unsafe { decode::<SocketAddr>(r) }.unwrap(); assert!(*t == socket_addr6);
+    let (t, r) = unsafe { decode::<SocketAddr>(&mut bytes) }.unwrap(); assert_eq!(*t, socket_addr4);
+    let (t, _r) = unsafe { decode::<SocketAddr>(r) }.unwrap(); assert_eq!(*t, socket_addr6);
 }
