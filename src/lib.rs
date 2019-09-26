@@ -75,8 +75,7 @@ pub mod abomonated;
 pub unsafe fn encode<T: Abomonation, W: Write>(typed: &T, write: &mut W) -> IOResult<()> {
     let slice = std::slice::from_raw_parts(mem::transmute(typed), mem::size_of::<T>());
     write.write_all(slice)?;
-    typed.entomb(write)?;
-    Ok(())
+    typed.entomb(write)
 }
 
 /// Decodes a mutable binary slice into an immutable typed reference.
@@ -262,7 +261,7 @@ macro_rules! tuple_abomonate {
             #[allow(non_snake_case)]
             #[inline(always)] unsafe fn entomb<WRITE: Write>(&self, write: &mut WRITE) -> IOResult<()> {
                 let ($(ref $ty,)*) = *self;
-                $($ty.entomb(write)?;)*
+                $( $ty.entomb(write)?; )*
                 Ok(())
             }
 
@@ -356,10 +355,9 @@ impl<T: Abomonation> Abomonation for Option<T> {
 impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
     #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         match self {
-            &Ok(ref inner) => inner.entomb(write)?,
-            &Err(ref inner) => inner.entomb(write)?,
-        };
-        Ok(())
+            &Ok(ref inner) => inner.entomb(write),
+            &Err(ref inner) => inner.entomb(write),
+        }
     }
 
     #[inline(always)] unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut[u8]) -> Option<&'a mut [u8]> {
@@ -476,8 +474,7 @@ array_abomonate!(32);
 impl Abomonation for String {
     #[inline]
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
-        write.write_all(self.as_bytes())?;
-        Ok(())
+        write.write_all(self.as_bytes())
     }
 
     #[inline]
@@ -531,8 +528,7 @@ impl<T: Abomonation> Abomonation for Box<T> {
     #[inline]
     unsafe fn entomb<W: Write>(&self, bytes: &mut W) -> IOResult<()> {
         bytes.write_all(std::slice::from_raw_parts(mem::transmute(&**self), mem::size_of::<T>()))?;
-        (**self).entomb(bytes)?;
-        Ok(())
+        (**self).entomb(bytes)
     }
 
     #[inline]
