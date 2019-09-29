@@ -72,7 +72,7 @@ pub mod abomonated;
 /// ```
 ///
 #[inline(always)]
-pub unsafe fn encode<T: Abomonation, W: Write>(typed: &T, mut write: W) -> IOResult<()> {
+pub unsafe fn encode<T: Entomb, W: Write>(typed: &T, mut write: W) -> IOResult<()> {
     let slice = std::slice::from_raw_parts(mem::transmute(typed), mem::size_of::<T>());
     write.write_all(slice)?;
     T::entomb(typed, &mut write)
@@ -119,7 +119,9 @@ pub unsafe fn encode<T: Abomonation, W: Write>(typed: &T, mut write: W) -> IORes
 ///     assert!(remaining.len() == 0);
 /// }
 /// ```
-pub unsafe fn decode<T: Abomonation>(bytes: &mut [u8]) -> Option<(&T, &mut [u8])> {
+pub unsafe fn decode<'bytes, T>(bytes: &'bytes mut [u8]) -> Option<(&'bytes T, &'bytes mut [u8])>
+    where T: Exhume<'bytes>
+{
     if bytes.len() < mem::size_of::<T>() { None }
     else {
         let (split1, split2) = bytes.split_at_mut(mem::size_of::<T>());
@@ -138,11 +140,23 @@ pub unsafe fn decode<T: Abomonation>(bytes: &mut [u8]) -> Option<(&T, &mut [u8])
 /// # Safety
 ///
 /// The `measure` method is safe. It neither produces nor consults serialized representations.
-pub fn measure<T: Abomonation>(typed: &T) -> usize {
+pub fn measure<T: Entomb>(typed: &T) -> usize {
     mem::size_of::<T>() + T::extent(&typed)
 }
 
 /// Abomonation provides methods to serialize any heap data the implementor owns.
+///
+/// The trait's lifetime parameter `'de` represents the set of slices of bytes `&'de mut [u8]`
+/// from which it is valid to deserialize an `&'de impl Abomonation<'de>`. Types which own all of
+/// their data may be deserialized freely, and implement this trait for all `'de`. However, we
+/// need to enforce some deserialization restrictions on types which contain references.
+///
+/// The reason is that abomonation performes in-place deserialization. To do that, it has to
+/// patch a type's reference to point to other serialized data. Where a type _should_ contain an
+/// `&'a T`, abomonation patches that into an `&'de T`. For this substitution to be valid, we
+/// need `'de` to outlive `'a`. Otherwise, a careless user could ask abomonation to deserialize a
+/// `&'static T` and get a `&'de T` which masquerades as an `&'static T` instead. The user could
+/// then copy this reference, drop the bytes, and get use-after-free undefined behavior.
 ///
 /// The default implementations for Abomonation's methods are all empty. Many types have no owned
 /// data to transcribe. Some do, however, and need to carefully implement these unsafe methods.
@@ -170,13 +184,35 @@ pub fn measure<T: Abomonation>(typed: &T) -> usize {
 ///
 /// If you are concerned about safety, it may be best to avoid Abomonation all together. It does
 /// several things that may be undefined behavior, depending on how undefined behavior is defined.
-pub unsafe trait Abomonation {
+pub unsafe trait Abomonation<'de> : Entomb + Exhume<'de> {}
+unsafe impl<'de, T: Entomb + Exhume<'de>> Abomonation<'de> for T {}
+
+/// Types which can be serialized into bytes by abomonation
+///
+/// Please consult the Abomonation trait's documentation for more details. Most
+/// types which are serializable by abomonation are also deserializable by
+/// abomonation, but we need to have a separate serialization and
+/// deserialization trait for obscure lifetime-related reasons.
+///
+pub unsafe trait Entomb {
     /// Write any additional information about `&self` beyond its binary representation.
     ///
     /// Most commonly this is owned data on the other end of pointers in `&self`. The return value
     /// reports any failures in writing to `write`.
     unsafe fn entomb<W: Write>(&self, _write: &mut W) -> IOResult<()> { Ok(()) }
 
+    /// Reports the number of further bytes required to entomb `self`.
+    fn extent(&self) -> usize { 0 }
+}
+
+/// Types which can be deserialized from `&'de mut [u8]` to `&'de T` by abomonation
+///
+/// Please consult the Abomonation trait's documentation for more details. Most
+/// types which are serializable by abomonation are also deserializable by
+/// abomonation, but we need to have a separate serialization and
+/// deserialization trait for obscure lifetime-related reasons.
+///
+pub unsafe trait Exhume<'de> : Entomb + 'de {
     /// Recover any information for `self_` not evident from its binary representation.
     ///
     /// Most commonly this populates pointers with valid references into `bytes`.
@@ -187,10 +223,7 @@ pub unsafe trait Abomonation {
     /// `exhume` using raw pointer operations as much as feasible.
     //
     // FIXME: Replace self_ with self once Rust has arbitrary self types
-    unsafe fn exhume<'a>(_self_: NonNull<Self>, bytes: &'a mut [u8]) -> Option<&'a mut [u8]> { Some(bytes) }
-
-    /// Reports the number of further bytes required to entomb `self`.
-    fn extent(&self) -> usize { 0 }
+    unsafe fn exhume(_self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> { Some(bytes) }
 }
 
 /// The `unsafe_abomonate!` macro takes a type name with an optional list of fields, and implements
@@ -238,29 +271,32 @@ pub unsafe trait Abomonation {
 #[deprecated(since="0.5", note="please use the abomonation_derive crate")]
 macro_rules! unsafe_abomonate {
     ($t:ty) => {
-        unsafe impl Abomonation for $t { }
+        unsafe impl $crate::Entomb for $t { }
+        unsafe impl $crate::Exhume<'_> for $t { }
     };
     ($t:ty : $($field:ident),*) => {
-        unsafe impl Abomonation for $t {
+        unsafe impl $crate::Entomb for $t {
             unsafe fn entomb<W: ::std::io::Write>(&self, write: &mut W) -> ::std::io::Result<()> {
-                $( Abomonation::entomb(&self.$field, write)?; )*
+                $( $crate::Entomb::entomb(&self.$field, write)?; )*
                 Ok(())
-            }
-
-            unsafe fn exhume<'a>(self_: ::std::ptr::NonNull<Self>, mut bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
-                $(
-                    // FIXME: This (briefly) constructs an &mut _ to invalid data, which is UB.
-                    //        The proposed &raw mut operator would allow avoiding this.
-                    let field_ptr: ::std::ptr::NonNull<_> = From::from(&mut (*self_.as_ptr()).$field);
-                    bytes = Abomonation::exhume(field_ptr, bytes)?;
-                )*
-                Some(bytes)
             }
 
             fn extent(&self) -> usize {
                 let mut size = 0;
-                $( size += Abomonation::extent(&self.$field); )*
+                $( size += $crate::Entomb::extent(&self.$field); )*
                 size
+            }
+        }
+
+        unsafe impl<'de> $crate::Exhume<'de> for $t {
+            unsafe fn exhume(self_: ::std::ptr::NonNull<Self>, mut bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
+                $(
+                    // FIXME: This (briefly) constructs an &mut _ to invalid data, which is UB.
+                    //        The proposed &raw mut operator would allow avoiding this.
+                    let field_ptr: ::std::ptr::NonNull<_> = From::from(&mut (*self_.as_ptr()).$field);
+                    bytes = $crate::Exhume::exhume(field_ptr, bytes)?;
+                )*
+                Some(bytes)
             }
         }
     };
@@ -269,25 +305,12 @@ macro_rules! unsafe_abomonate {
 // general code for tuples (can't use '0', '1', ... as field identifiers)
 macro_rules! tuple_abomonate {
     ( $($ty:ident)+) => (
-        unsafe impl<$($ty: Abomonation),*> Abomonation for ($($ty,)*) {
+        unsafe impl<$($ty: Entomb),*> Entomb for ($($ty,)*) {
             #[allow(non_snake_case)]
             unsafe fn entomb<WRITE: Write>(&self, write: &mut WRITE) -> IOResult<()> {
                 let ($(ref $ty,)*) = *self;
                 $( $ty::entomb($ty, write)?; )*
                 Ok(())
-            }
-
-            #[allow(non_snake_case)]
-            unsafe fn exhume<'a>(self_: NonNull<Self>, mut bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
-                // FIXME: This (briefly) constructs a "ref mut" to invalid data, which is UB.
-                //        I think avoiding this would require a cleaner way to iterate over tuple fields.
-                //        One possibility would be a C++11-style combination of variadic generics and recursion.
-                let ($(ref mut $ty,)*) = *self_.as_ptr();
-                $(
-                    let field_ptr : NonNull<$ty> = From::from($ty);
-                    bytes = $ty::exhume(field_ptr, bytes)?;
-                )*
-                Some(bytes)
             }
 
             #[allow(non_snake_case)]
@@ -298,50 +321,96 @@ macro_rules! tuple_abomonate {
                 size
             }
         }
+
+        unsafe impl<'de, $($ty: Exhume<'de>),*> Exhume<'de> for ($($ty,)*) {
+            #[allow(non_snake_case)]
+            unsafe fn exhume(self_: NonNull<Self>, mut bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
+                // FIXME: This (briefly) constructs a "ref mut" to invalid data, which is UB.
+                //        I think avoiding this would require a cleaner way to iterate over tuple fields.
+                //        One possibility would be a C++11-style combination of variadic generics and recursion.
+                let ($(ref mut $ty,)*) = *self_.as_ptr();
+                $(
+                    let field_ptr : NonNull<$ty> = From::from($ty);
+                    bytes = $ty::exhume(field_ptr, bytes)?;
+                )*
+                Some(bytes)
+            }
+        }
     );
 }
 
-unsafe impl Abomonation for u8 { }
-unsafe impl Abomonation for u16 { }
-unsafe impl Abomonation for u32 { }
-unsafe impl Abomonation for u64 { }
-unsafe impl Abomonation for u128 { }
-unsafe impl Abomonation for usize { }
+unsafe impl Entomb for u8 {}
+unsafe impl Exhume<'_> for u8 {}
+unsafe impl Entomb for u16 {}
+unsafe impl Exhume<'_> for u16 {}
+unsafe impl Entomb for u32 {}
+unsafe impl Exhume<'_> for u32 {}
+unsafe impl Entomb for u64 {}
+unsafe impl Exhume<'_> for u64 {}
+unsafe impl Entomb for u128 {}
+unsafe impl Exhume<'_> for u128 {}
+unsafe impl Entomb for usize {}
+unsafe impl Exhume<'_> for usize {}
 
-unsafe impl Abomonation for i8 { }
-unsafe impl Abomonation for i16 { }
-unsafe impl Abomonation for i32 { }
-unsafe impl Abomonation for i64 { }
-unsafe impl Abomonation for i128 { }
-unsafe impl Abomonation for isize { }
+unsafe impl Entomb for i8 {}
+unsafe impl Exhume<'_> for i8 {}
+unsafe impl Entomb for i16 {}
+unsafe impl Exhume<'_> for i16 {}
+unsafe impl Entomb for i32 {}
+unsafe impl Exhume<'_> for i32 {}
+unsafe impl Entomb for i64 {}
+unsafe impl Exhume<'_> for i64 {}
+unsafe impl Entomb for i128 {}
+unsafe impl Exhume<'_> for i128 {}
+unsafe impl Entomb for isize {}
+unsafe impl Exhume<'_> for isize {}
 
-unsafe impl Abomonation for NonZeroU8 { }
-unsafe impl Abomonation for NonZeroU16 { }
-unsafe impl Abomonation for NonZeroU32 { }
-unsafe impl Abomonation for NonZeroU64 { }
-unsafe impl Abomonation for NonZeroU128 { }
-unsafe impl Abomonation for NonZeroUsize { }
+unsafe impl Entomb for NonZeroU8 {}
+unsafe impl Exhume<'_> for NonZeroU8 {}
+unsafe impl Entomb for NonZeroU16 {}
+unsafe impl Exhume<'_> for NonZeroU16 {}
+unsafe impl Entomb for NonZeroU32 {}
+unsafe impl Exhume<'_> for NonZeroU32 {}
+unsafe impl Entomb for NonZeroU64 {}
+unsafe impl Exhume<'_> for NonZeroU64 {}
+unsafe impl Entomb for NonZeroU128 {}
+unsafe impl Exhume<'_> for NonZeroU128 {}
+unsafe impl Entomb for NonZeroUsize {}
+unsafe impl Exhume<'_> for NonZeroUsize {}
 
-unsafe impl Abomonation for NonZeroI8 { }
-unsafe impl Abomonation for NonZeroI16 { }
-unsafe impl Abomonation for NonZeroI32 { }
-unsafe impl Abomonation for NonZeroI64 { }
-unsafe impl Abomonation for NonZeroI128 { }
-unsafe impl Abomonation for NonZeroIsize { }
+unsafe impl Entomb for NonZeroI8 {}
+unsafe impl Exhume<'_> for NonZeroI8 {}
+unsafe impl Entomb for NonZeroI16 {}
+unsafe impl Exhume<'_> for NonZeroI16 {}
+unsafe impl Entomb for NonZeroI32 {}
+unsafe impl Exhume<'_> for NonZeroI32 {}
+unsafe impl Entomb for NonZeroI64 {}
+unsafe impl Exhume<'_> for NonZeroI64 {}
+unsafe impl Entomb for NonZeroI128 {}
+unsafe impl Exhume<'_> for NonZeroI128 {}
+unsafe impl Entomb for NonZeroIsize {}
+unsafe impl Exhume<'_> for NonZeroIsize {}
 
-unsafe impl Abomonation for f32 { }
-unsafe impl Abomonation for f64 { }
+unsafe impl Entomb for f32 {}
+unsafe impl Exhume<'_> for f32 {}
+unsafe impl Entomb for f64 {}
+unsafe impl Exhume<'_> for f64 {}
 
-unsafe impl Abomonation for bool { }
-unsafe impl Abomonation for () { }
+unsafe impl Entomb for bool {}
+unsafe impl Exhume<'_> for bool {}
+unsafe impl Entomb for () {}
+unsafe impl Exhume<'_> for () {}
 
-unsafe impl Abomonation for char { }
+unsafe impl Entomb for char {}
+unsafe impl Exhume<'_> for char {}
 
-unsafe impl Abomonation for ::std::time::Duration { }
+unsafe impl Entomb for ::std::time::Duration {}
+unsafe impl Exhume<'_> for ::std::time::Duration {}
 
-unsafe impl<T> Abomonation for PhantomData<T> {}
+unsafe impl<T> Entomb for PhantomData<T> {}
+unsafe impl<'de, T: 'de> Exhume<'de> for PhantomData<T> {}
 
-unsafe impl<T: Abomonation> Abomonation for Option<T> {
+unsafe impl<T: Entomb> Entomb for Option<T> {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         if let &Some(ref inner) = self {
             T::entomb(inner, write)?;
@@ -349,7 +418,12 @@ unsafe impl<T: Abomonation> Abomonation for Option<T> {
         Ok(())
     }
 
-    unsafe fn exhume<'a>(self_: NonNull<Self>, mut bytes: &'a mut[u8]) -> Option<&'a mut [u8]> {
+    fn extent(&self) -> usize {
+        self.as_ref().map(T::extent).unwrap_or(0)
+    }
+}
+unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Option<T> {
+    unsafe fn exhume(self_: NonNull<Self>, mut bytes: &'de mut[u8]) -> Option<&'de mut [u8]> {
         // FIXME: This (briefly) constructs a "ref mut" to invalid data, which is UB.
         //        I'm not sure if this can be fully resolved without relying on enum implementation details.
         if let Some(ref mut inner) = *self_.as_ptr() {
@@ -358,13 +432,9 @@ unsafe impl<T: Abomonation> Abomonation for Option<T> {
         }
         Some(bytes)
     }
-
-    fn extent(&self) -> usize {
-        self.as_ref().map(T::extent).unwrap_or(0)
-    }
 }
 
-unsafe impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
+unsafe impl<T: Entomb, E: Entomb> Entomb for Result<T, E> {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         match self {
             &Ok(ref inner) => T::entomb(inner, write),
@@ -372,7 +442,15 @@ unsafe impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
         }
     }
 
-    unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut[u8]) -> Option<&'a mut [u8]> {
+    fn extent(&self) -> usize {
+        match self {
+            &Ok(ref inner) => T::extent(inner),
+            &Err(ref inner) => E::extent(inner),
+        }
+    }
+}
+unsafe impl<'de, T: Exhume<'de>, E: Exhume<'de>> Exhume<'de> for Result<T, E> {
+    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut[u8]) -> Option<&'de mut [u8]> {
         // FIXME: This (briefly) constructs a "ref mut" to invalid data, which is UB.
         //        I'm not sure if this can be fully resolved without relying on enum implementation details.
         match *self_.as_ptr() {
@@ -384,13 +462,6 @@ unsafe impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
                 let inner_ptr : NonNull<E> = From::from(inner);
                 E::exhume(inner_ptr, bytes)
             }
-        }
-    }
-
-    fn extent(&self) -> usize {
-        match self {
-            &Ok(ref inner) => T::extent(inner),
-            &Err(ref inner) => E::extent(inner),
         }
     }
 }
@@ -430,17 +501,19 @@ tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD
 
 macro_rules! array_abomonate {
     ($size:expr) => (
-        unsafe impl<T: Abomonation> Abomonation for [T; $size] {
+        unsafe impl<T: Entomb> Entomb for [T; $size] {
             unsafe fn entomb<W: Write>(&self, write: &mut W) ->  IOResult<()> {
                 entomb_slice(&self[..], write)
             }
 
-            unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut[u8]) -> Option<&'a mut [u8]> {
-                exhume_slice(self_.as_ptr() as *mut T, $size, bytes)
-            }
-
             fn extent(&self) -> usize {
                 slice_extent(&self[..])
+            }
+        }
+
+        unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for [T; $size] {
+            unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut[u8]) -> Option<&'de mut [u8]> {
+                exhume_slice(self_.as_ptr() as *mut T, $size, bytes)
             }
         }
     )
@@ -480,13 +553,18 @@ array_abomonate!(30);
 array_abomonate!(31);
 array_abomonate!(32);
 
-unsafe impl Abomonation for String {
+unsafe impl Entomb for String {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         write.write_all(self.as_bytes())
     }
 
+    fn extent(&self) -> usize {
+        self.len()
+    }
+}
+unsafe impl<'de> Exhume<'de> for String {
     #[inline]
-    unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
+    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
         // FIXME: This (briefly) constructs an &String to invalid data, which is UB.
         //        I'm not sure if this can be fully resolved without relying on String implementation details.
         let self_len = self_.as_ref().len();
@@ -497,20 +575,21 @@ unsafe impl Abomonation for String {
             Some(rest)
         }
     }
-
-    fn extent(&self) -> usize {
-        self.len()
-    }
 }
 
-unsafe impl<T: Abomonation> Abomonation for Vec<T> {
+unsafe impl<T: Entomb> Entomb for Vec<T> {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         write.write_all(typed_to_bytes(&self[..]))?;
         entomb_slice(&self[..], write)
     }
 
+    fn extent(&self) -> usize {
+        mem::size_of::<T>() * self.len() + slice_extent(&self[..])
+    }
+}
+unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Vec<T> {
     #[inline]
-    unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
+    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
         // FIXME: This (briefly) constructs an &Vec<T> to invalid data, which is UB.
         //        I'm not sure if this can be fully resolved without relying on Vec implementation details.
         let self_len = self_.as_ref().len();
@@ -524,19 +603,20 @@ unsafe impl<T: Abomonation> Abomonation for Vec<T> {
             Some(rest)
         }
     }
-
-    fn extent(&self) -> usize {
-        mem::size_of::<T>() * self.len() + slice_extent(&self[..])
-    }
 }
 
-unsafe impl<T: Abomonation> Abomonation for Box<T> {
+unsafe impl<T: Entomb> Entomb for Box<T> {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         write.write_all(typed_to_bytes(std::slice::from_ref(&**self)))?;
         T::entomb(&**self, write)
     }
 
-    unsafe fn exhume<'a>(self_: NonNull<Self>, bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
+    fn extent(&self) -> usize {
+        mem::size_of::<T>() + T::extent(&**self)
+    }
+}
+unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Box<T> {
+    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
         let binary_len = mem::size_of::<T>();
         if binary_len > bytes.len() { None }
         else {
@@ -547,10 +627,6 @@ unsafe impl<T: Abomonation> Abomonation for Box<T> {
             Some(rest)
         }
     }
-
-    fn extent(&self) -> usize {
-        mem::size_of::<T>() + T::extent(&**self)
-    }
 }
 
 // This method currently enables undefined behavior, by exposing padding bytes.
@@ -559,15 +635,24 @@ unsafe fn typed_to_bytes<T>(slice: &[T]) -> &[u8] {
 }
 
 // Common subset of "entomb" for all [T]-like types
-unsafe fn entomb_slice<T: Abomonation, W: Write>(slice: &[T], write: &mut W) ->  IOResult<()> {
+unsafe fn entomb_slice<T: Entomb, W: Write>(slice: &[T], write: &mut W) -> IOResult<()> {
     for element in slice { T::entomb(element, write)?; }
     Ok(())
+}
+
+// Common subset of "extent" for all [T]-like types
+fn slice_extent<T: Entomb>(slice: &[T]) -> usize {
+    slice.iter().map(T::extent).sum()
 }
 
 // Common subset of "exhume" for all [T]-like types
 // (I'd gladly take a NonNull<[T]>, but it is too difficult to build raw pointers to slices)
 #[inline]
-unsafe fn exhume_slice<'a, T: Abomonation>(first_ptr: *mut T, length: usize, mut bytes: &'a mut [u8]) -> Option<&'a mut [u8]> {
+unsafe fn exhume_slice<'de, T: Exhume<'de>>(
+    first_ptr: *mut T,
+    length: usize,
+    mut bytes: &'de mut [u8]
+) -> Option<&'de mut [u8]> {
     for i in 0..length {
         let element_ptr: NonNull<T> = NonNull::new_unchecked(first_ptr.add(i));
         bytes = T::exhume(element_ptr, bytes)?;
@@ -575,20 +660,21 @@ unsafe fn exhume_slice<'a, T: Abomonation>(first_ptr: *mut T, length: usize, mut
     Some(bytes)
 }
 
-// Common subset of "extent" for all [T]-like types
-fn slice_extent<T: Abomonation>(slice: &[T]) -> usize {
-    slice.iter().map(T::extent).sum()
-}
-
 mod network {
-    use Abomonation;
+    use super::{Entomb, Exhume};
     use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, IpAddr, Ipv4Addr, Ipv6Addr};
 
-    unsafe impl Abomonation for IpAddr { }
-    unsafe impl Abomonation for Ipv4Addr { }
-    unsafe impl Abomonation for Ipv6Addr { }
+    unsafe impl Entomb for IpAddr {}
+    unsafe impl Exhume<'_> for IpAddr {}
+    unsafe impl Entomb for Ipv4Addr {}
+    unsafe impl Exhume<'_> for Ipv4Addr {}
+    unsafe impl Entomb for Ipv6Addr {}
+    unsafe impl Exhume<'_> for Ipv6Addr {}
 
-    unsafe impl Abomonation for SocketAddr { }
-    unsafe impl Abomonation for SocketAddrV4 { }
-    unsafe impl Abomonation for SocketAddrV6 { }
+    unsafe impl Entomb for SocketAddr {}
+    unsafe impl Exhume<'_> for SocketAddr {}
+    unsafe impl Entomb for SocketAddrV4 {}
+    unsafe impl Exhume<'_> for SocketAddrV4 {}
+    unsafe impl Entomb for SocketAddrV6 {}
+    unsafe impl Exhume<'_> for SocketAddrV6 {}
 }
