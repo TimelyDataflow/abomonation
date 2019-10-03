@@ -501,15 +501,34 @@ tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD
 tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD AE);
 tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD AE AF);
 
+unsafe impl<T: Entomb> Entomb for [T] {
+    unsafe fn entomb<W: Write>(&self, write: &mut W) ->  IOResult<()> {
+        for element in self { T::entomb(element, write)?; }
+        Ok(())
+    }
+
+    fn extent(&self) -> usize {
+        self.iter().map(T::extent).sum()
+    }
+}
+unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for [T] {
+    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut[u8]) -> Option<&'de mut [u8]> {
+        // FIXME: This constructs an &[T] to invalid data, which is UB.
+        //        I'm not sure if this can be fully resolved without relying on slice implementation details.
+        let self_len = self_.as_ref().len();
+        exhume_slice(self_.as_ptr() as *mut T, self_len, bytes)
+    }
+}
+
 macro_rules! array_abomonate {
     ($size:expr) => (
         unsafe impl<T: Entomb> Entomb for [T; $size] {
             unsafe fn entomb<W: Write>(&self, write: &mut W) ->  IOResult<()> {
-                entomb_slice(&self[..], write)
+                <[T]>::entomb(&self[..], write)
             }
 
             fn extent(&self) -> usize {
-                slice_extent(&self[..])
+                <[T]>::extent(&self[..])
             }
         }
 
@@ -618,14 +637,56 @@ unsafe impl<'de> Exhume<'de> for String {
     }
 }
 
-unsafe impl<T: Entomb> Entomb for Vec<T> {
+unsafe impl<'de, T: Entomb> Entomb for &'de [T] {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         write.write_all(typed_to_bytes(&self[..]))?;
-        entomb_slice(&self[..], write)
+        <[T]>::entomb(&self[..], write)
     }
 
     fn extent(&self) -> usize {
-        mem::size_of::<T>() * self.len() + slice_extent(&self[..])
+        mem::size_of::<T>() * self.len() + <[T]>::extent(&self[..])
+    }
+}
+unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for &'de [T] {
+    #[inline]
+    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
+        // FIXME: This (briefly) constructs an &[T] to invalid data, which is UB.
+        //        I'm not sure if this can be fully resolved without relying on slice implementation details.
+        let self_len = self_.as_ref().len();
+        let (s, rest) = exhume_slice_ref(self_len, bytes)?;
+        self_.as_ptr().write(s);
+        Some(rest)
+    }
+}
+
+unsafe impl<'de, T: Entomb> Entomb for &'de mut [T] {
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+        <&[T]>::entomb(&&self[..], write)
+    }
+
+    fn extent(&self) -> usize {
+        <&[T]>::extent(&&self[..])
+    }
+}
+unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for &'de mut [T] {
+    #[inline]
+    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
+        // FIXME: This (briefly) constructs an &mut [T] to invalid data, which is UB.
+        //        I'm not sure if this can be fully resolved without relying on slice implementation details.
+        let self_len = self_.as_ref().len();
+        let (s, rest) = exhume_slice_ref(self_len, bytes)?;
+        self_.as_ptr().write(s);
+        Some(rest)
+    }
+}
+
+unsafe impl<T: Entomb> Entomb for Vec<T> {
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+        <&[T]>::entomb(&&self[..], write)
+    }
+
+    fn extent(&self) -> usize {
+        <&[T]>::extent(&&self[..])
     }
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Vec<T> {
@@ -634,15 +695,9 @@ unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Vec<T> {
         // FIXME: This (briefly) constructs an &Vec<T> to invalid data, which is UB.
         //        I'm not sure if this can be fully resolved without relying on Vec implementation details.
         let self_len = self_.as_ref().len();
-        let binary_len = self_len * mem::size_of::<T>();
-        if binary_len > bytes.len() { None }
-        else {
-            let (mine, mut rest) = bytes.split_at_mut(binary_len);
-            let first_ptr = mine.as_mut_ptr() as *mut T;
-            rest = exhume_slice(first_ptr, self_len, rest)?;
-            self_.as_ptr().write(Vec::from_raw_parts(first_ptr, self_len, self_len));
-            Some(rest)
-        }
+        let (s, rest) = exhume_slice_ref(self_len, bytes)?;
+        self_.as_ptr().write(Vec::from_raw_parts(s.as_mut_ptr(), self_len, self_len));
+        Some(rest)
     }
 }
 
@@ -717,19 +772,8 @@ unsafe fn typed_to_bytes<T>(slice: &[T]) -> &[u8] {
     std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len() * mem::size_of::<T>())
 }
 
-// Common subset of "entomb" for all [T]-like types
-unsafe fn entomb_slice<T: Entomb, W: Write>(slice: &[T], write: &mut W) -> IOResult<()> {
-    for element in slice { T::entomb(element, write)?; }
-    Ok(())
-}
-
-// Common subset of "extent" for all [T]-like types
-fn slice_extent<T: Entomb>(slice: &[T]) -> usize {
-    slice.iter().map(T::extent).sum()
-}
-
 // Common subset of "exhume" for all [T]-like types
-// (I'd gladly take a NonNull<[T]>, but it is too difficult to build raw pointers to slices)
+// (I'd gladly move this to [T]::exhume, but building a NonNull<[T]> is currently too difficult)
 #[inline]
 unsafe fn exhume_slice<'de, T: Exhume<'de>>(
     first_ptr: *mut T,
@@ -741,6 +785,22 @@ unsafe fn exhume_slice<'de, T: Exhume<'de>>(
         bytes = T::exhume(element_ptr, bytes)?;
     }
     Some(bytes)
+}
+
+// Common subset of "exhume" for all &[T]-like types
+#[inline]
+unsafe fn exhume_slice_ref<'de, T: Exhume<'de>>(
+    length: usize,
+    bytes: &'de mut [u8]
+) -> Option<(&'de mut [T], &'de mut [u8])> {
+    let binary_len = length * mem::size_of::<T>();
+    if binary_len > bytes.len() { None }
+    else {
+        let (mine, mut rest) = bytes.split_at_mut(binary_len);
+        let first_ptr = mine.as_mut_ptr() as *mut T;
+        rest = exhume_slice(first_ptr, length, rest)?;
+        Some((std::slice::from_raw_parts_mut(first_ptr, length).into(), rest))
+    }
 }
 
 // Common subset of "exhume" for all &mut T-like types

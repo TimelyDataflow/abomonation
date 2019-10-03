@@ -90,6 +90,10 @@ gen_tests!{
     &"grawwwwrr!" => (test_str_pass,
                       test_str_fail,
                       test_str_size),
+
+    &[0, 1, 2] => (test_slice_pass,
+                   test_slice_fail,
+                   test_slice_size),
 }
 
 // FIXME: I could not find an API which allows _test_pass to allocate a Vec
