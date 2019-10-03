@@ -82,6 +82,10 @@ gen_tests!{
     PhantomNotAbo::default() => (test_phantom_notabo_pass,
                                  test_phantom_notabo_fail,
                                  test_phantom_notabo_size),
+
+    Some(&42u64) => (test_ref_u64_pass,
+                     test_ref_u64_fail,
+                     test_ref_u64_size),
 }
 
 // FIXME: I could not find an API which allows _test_pass to allocate a Vec

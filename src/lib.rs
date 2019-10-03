@@ -605,7 +605,21 @@ unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Vec<T> {
     }
 }
 
-unsafe impl<T: Entomb> Entomb for Box<T> {
+// NOTE: While it might be tempting to decouple 'de from the reference target
+//       and implement Exhume<'de> for &'target T, the two lifetimes actually
+//       have to be exactly the same. Here's proof :
+//
+//       - Deserialization would produce an &'de &'target T. A reference is
+//         only valid if the target is longer-lived, so we need 'target: 'de.
+//       - The deserializer will silently patch &'target T into &'de T. This is
+//         only safe to do if &'de T : &'target T, so we also need 'de: 'target.
+//
+//       If 'target must outlive 'de and 'de must outlive 'target, then the two
+//       lifetimes actually must be exactly the same. Which kind of makes sense:
+//       we start from 'de bytes, and we end up producing references that point
+//       into those same bytes.
+//
+unsafe impl<'de, T: Entomb> Entomb for &'de T {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         write.write_all(typed_to_bytes(std::slice::from_ref(&**self)))?;
         T::entomb(&**self, write)
@@ -615,17 +629,45 @@ unsafe impl<T: Entomb> Entomb for Box<T> {
         mem::size_of::<T>() + T::extent(&**self)
     }
 }
+unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for &'de T {
+    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
+        let (target, rest) = exhume_ref(bytes)?;
+        self_.as_ptr().write(target);
+        Some(rest)
+    }
+}
+
+unsafe impl<'de, T: Entomb> Entomb for &'de mut T {
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+        <&T>::entomb(&&**self, write)
+    }
+
+    fn extent(&self) -> usize {
+        <&T>::extent(&&**self)
+    }
+}
+unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for &'de mut T {
+    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
+        let (target, rest) = exhume_ref(bytes)?;
+        self_.as_ptr().write(target);
+        Some(rest)
+    }
+}
+
+unsafe impl<T: Entomb> Entomb for Box<T> {
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+        <&T>::entomb(&self.as_ref(), write)
+    }
+
+    fn extent(&self) -> usize {
+        <&T>::extent(&self.as_ref())
+    }
+}
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Box<T> {
     unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
-        let binary_len = mem::size_of::<T>();
-        if binary_len > bytes.len() { None }
-        else {
-            let (mine, mut rest) = bytes.split_at_mut(binary_len);
-            let box_target : NonNull<T> = NonNull::new_unchecked(mine.as_mut_ptr() as *mut T);
-            rest = T::exhume(box_target, rest)?;
-            self_.as_ptr().write(Box::from_raw(box_target.as_ptr()));
-            Some(rest)
-        }
+        let (target, rest) = exhume_ref(bytes)?;
+        self_.as_ptr().write(Box::from_raw(target as *mut _));
+        Some(rest)
     }
 }
 
@@ -658,6 +700,18 @@ unsafe fn exhume_slice<'de, T: Exhume<'de>>(
         bytes = T::exhume(element_ptr, bytes)?;
     }
     Some(bytes)
+}
+
+// Common subset of "exhume" for all &mut T-like types
+unsafe fn exhume_ref<'de, T: Exhume<'de>>(bytes: &'de mut [u8]) -> Option<(&'de mut T, &'de mut [u8])> {
+    let binary_len = mem::size_of::<T>();
+    if binary_len > bytes.len() { None }
+    else {
+        let (mine, mut rest) = bytes.split_at_mut(binary_len);
+        let target : NonNull<T> = NonNull::new_unchecked(mine.as_mut_ptr() as *mut T);
+        rest = T::exhume(target, rest)?;
+        Some((&mut *target.as_ptr(), rest))
+    }
 }
 
 mod network {
