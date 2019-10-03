@@ -403,6 +403,8 @@ unsafe impl Exhume<'_> for () {}
 
 unsafe impl Entomb for char {}
 unsafe impl Exhume<'_> for char {}
+unsafe impl Entomb for str {}
+unsafe impl Exhume<'_> for str {}
 
 unsafe impl Entomb for ::std::time::Duration {}
 unsafe impl Exhume<'_> for ::std::time::Duration {}
@@ -553,7 +555,7 @@ array_abomonate!(30);
 array_abomonate!(31);
 array_abomonate!(32);
 
-unsafe impl Entomb for String {
+unsafe impl<'de> Entomb for &'de str {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         write.write_all(self.as_bytes())
     }
@@ -562,18 +564,57 @@ unsafe impl Entomb for String {
         self.len()
     }
 }
+unsafe impl<'de> Exhume<'de> for &'de str {
+    #[inline]
+    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
+        // FIXME: This (briefly) constructs an &str to invalid data, which is UB.
+        //        I'm not sure if this can be fully resolved without relying on &str implementation details.
+        let self_len = self_.as_ref().len();
+        let (s, rest) = exhume_str_ref(self_len, bytes)?;
+        self_.as_ptr().write(s);
+        Some(rest)
+    }
+}
+
+unsafe impl<'de> Entomb for &'de mut str {
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+        <&str>::entomb(&self.as_ref(), write)
+    }
+
+    fn extent(&self) -> usize {
+        <&str>::extent(&self.as_ref())
+    }
+}
+unsafe impl<'de> Exhume<'de> for &'de mut str {
+    #[inline]
+    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
+        // FIXME: This (briefly) constructs an &mut str to invalid data, which is UB.
+        //        I'm not sure if this can be fully resolved without relying on &str implementation details.
+        let self_len = self_.as_ref().len();
+        let (s, rest) = exhume_str_ref(self_len, bytes)?;
+        self_.as_ptr().write(s);
+        Some(rest)
+    }
+}
+
+unsafe impl Entomb for String {
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+        <&str>::entomb(&self.as_ref(), write)
+    }
+
+    fn extent(&self) -> usize {
+        <&str>::extent(&self.as_ref())
+    }
+}
 unsafe impl<'de> Exhume<'de> for String {
     #[inline]
     unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
         // FIXME: This (briefly) constructs an &String to invalid data, which is UB.
         //        I'm not sure if this can be fully resolved without relying on String implementation details.
         let self_len = self_.as_ref().len();
-        if self_len > bytes.len() { None }
-        else {
-            let (mine, rest) = bytes.split_at_mut(self_len);
-            self_.as_ptr().write(String::from_raw_parts(mine.as_mut_ptr(), self_len, self_len));
-            Some(rest)
-        }
+        let (s, rest) = exhume_str_ref(self_len, bytes)?;
+        self_.as_ptr().write(String::from_raw_parts(s.as_mut_ptr(), s.len(), s.len()));
+        Some(rest)
     }
 }
 
@@ -711,6 +752,15 @@ unsafe fn exhume_ref<'de, T: Exhume<'de>>(bytes: &'de mut [u8]) -> Option<(&'de 
         let target : NonNull<T> = NonNull::new_unchecked(mine.as_mut_ptr() as *mut T);
         rest = T::exhume(target, rest)?;
         Some((&mut *target.as_ptr(), rest))
+    }
+}
+
+// Common subset of "exhume" for all &str-like types
+unsafe fn exhume_str_ref<'de>(length: usize, bytes: &'de mut [u8]) -> Option<(&'de mut str, &'de mut [u8])> {
+    if length > bytes.len() { None }
+    else {
+        let (mine, rest) = bytes.split_at_mut(length);
+        Some((std::str::from_utf8_unchecked_mut(mine), rest))
     }
 }
 

@@ -86,6 +86,10 @@ gen_tests!{
     Some(&42u64) => (test_ref_u64_pass,
                      test_ref_u64_fail,
                      test_ref_u64_size),
+
+    &"grawwwwrr!" => (test_str_pass,
+                      test_str_fail,
+                      test_str_size),
 }
 
 // FIXME: I could not find an API which allows _test_pass to allocate a Vec
