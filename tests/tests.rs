@@ -157,3 +157,33 @@ fn test_net_types() {
     let (t, r) = unsafe { decode::<SocketAddr>(&mut bytes) }.unwrap(); assert_eq!(*t, socket_addr4);
     let (t, _r) = unsafe { decode::<SocketAddr>(r) }.unwrap(); assert_eq!(*t, socket_addr6);
 }
+
+#[test]
+fn test_abomonated_owned() {
+  use abomonation::abomonated::Abomonated;
+
+  let s_owned = "This is an owned string".to_owned();
+
+  let mut bytes = Vec::new();
+  unsafe { encode::<String, _>(&s_owned, &mut bytes).unwrap(); }
+
+  let abo = unsafe { Abomonated::<String, _>::new(bytes).unwrap() };
+  assert_eq!(abo.as_ref(), &s_owned);
+  assert_eq!(&*abo, &s_owned);
+}
+
+#[test]
+fn test_abomonated_ref() {
+  use abomonation::abomonated::Abomonated;
+
+  let s_owned = "This is an owned string".to_owned();
+  let s_borrow = &s_owned[11..16];  // "owned"
+
+  let mut bytes = Vec::new();
+  unsafe { encode::<&str, _>(&s_borrow, &mut bytes).unwrap(); }
+
+  let abo = unsafe { Abomonated::<&str, _>::new(bytes).unwrap() };
+  assert_eq!(abo.as_ref(), &s_borrow);
+  // NOTE: Cannot use Deref here because &str contains a reference
+  // FIXME: Figure out a way to add a compile_fail test for this
+}
