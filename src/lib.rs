@@ -35,7 +35,7 @@
 //! }
 //! ```
 
-use std::mem;       // yup, used pretty much everywhere.
+use std::mem::{self, MaybeUninit};
 use std::io::Write; // for bytes.write_all; push_all is unstable and extend is slow.
 use std::io::Result as IOResult;
 use std::marker::PhantomData;
@@ -48,9 +48,16 @@ pub mod abomonated;
 ///
 /// # Safety
 ///
-/// This method is unsafe because it is unsafe to transmute typed allocations to binary.
-/// Furthermore, Rust currently indicates that it is undefined behavior to observe padding
-/// bytes, which will happen when we `memmcpy` structs which contain padding bytes.
+/// This method is unsafe because Rust currently specifies that it is undefined
+/// behavior to construct an `&[u8]` to padding bytes, which will happen when we
+/// write down binary data of a type T which contains padding bytes as we must
+/// pass down an `&[u8]` to the `Write` API.
+///
+/// Eliminating this UB will require changes to the Rust languages or `std` to
+/// add either of 1/a non-UB way to turn padding bytes into `&[u8]` or 2/a way
+/// to send an `&[MaybeUninit<u8>]` (which allows padding bytes) to a Write
+/// implementation. See the following discussion thread for more info:
+/// https://internals.rust-lang.org/t/writing-down-binary-data-with-padding-bytes/11197/
 ///
 /// # Examples
 /// ```
@@ -73,8 +80,7 @@ pub mod abomonated;
 ///
 #[inline(always)]
 pub unsafe fn encode<T: Entomb, W: Write>(typed: &T, mut write: W) -> IOResult<()> {
-    let slice = std::slice::from_raw_parts(mem::transmute(typed), mem::size_of::<T>());
-    write.write_all(slice)?;
+    write_bytes(&mut write, std::slice::from_ref(typed))?;
     T::entomb(typed, &mut write)
 }
 
@@ -639,7 +645,7 @@ unsafe impl<'de> Exhume<'de> for String {
 
 unsafe impl<'de, T: Entomb> Entomb for &'de [T] {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
-        write.write_all(typed_to_bytes(&self[..]))?;
+        write_bytes(write, &self[..])?;
         <[T]>::entomb(&self[..], write)
     }
 
@@ -717,7 +723,7 @@ unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Vec<T> {
 //
 unsafe impl<'de, T: Entomb> Entomb for &'de T {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
-        write.write_all(typed_to_bytes(std::slice::from_ref(&**self)))?;
+        write_bytes(write, std::slice::from_ref(&**self))?;
         T::entomb(&**self, write)
     }
 
@@ -767,9 +773,23 @@ unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Box<T> {
     }
 }
 
-// This method currently enables undefined behavior, by exposing padding bytes.
-unsafe fn typed_to_bytes<T>(slice: &[T]) -> &[u8] {
-    std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len() * mem::size_of::<T>())
+// Copy typed data into a writer, currently UB if type T contains padding bytes.
+unsafe fn write_bytes<T>(write: &mut impl Write, slice: &[T]) -> IOResult<()> {
+    // This is the correct way to reinterpret typed data as bytes, it accounts
+    // for the fact that T may contain uninitialized padding bytes.
+    let bytes = std::slice::from_raw_parts(
+        slice.as_ptr() as *const MaybeUninit<u8>,
+        slice.len() * mem::size_of::<T>()
+    );
+
+    // FIXME: Unfortunately, `Write::write_all()` expects initialized bytes.
+    //        This transmute is undefined behavior if T contains padding bytes.
+    //
+    //        To resolve this UB, we'd need either a "freeze" operation that
+    //        turns uninitialized bytes into arbitrary initialized bytes, or an
+    //        extra `Write` interface that accepts uninitialized bytes.
+    //
+    write.write_all(mem::transmute::<&[MaybeUninit<u8>], &[u8]>(bytes))
 }
 
 // Common subset of "exhume" for all [T]-like types
