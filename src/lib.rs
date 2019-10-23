@@ -43,6 +43,7 @@ use std::num::*;
 use std::ptr::NonNull;
 
 pub mod abomonated;
+pub mod align;
 
 /// Encodes a typed reference into a binary buffer.
 ///
