@@ -7,7 +7,7 @@
 
 use std::{
     io::Write,
-    mem,
+    mem::{self, MaybeUninit},
     ptr::NonNull,
 };
 
@@ -77,9 +77,27 @@ impl<W: Write> AlignedWriter<W> {
             self.written_so_far += 1;
         }
 
-        // Write down the binary data and exit
-        // FIXME: Move write_bytes functionality here
-        crate::write_bytes(&mut self.inner, data)?;
+        // This is the correct way to reinterpret typed data as bytes, it
+        // accounts for the fact that T may contain padding bytes.
+        let bytes = std::slice::from_raw_parts(
+            data.as_ptr() as *const MaybeUninit<u8>,
+            data.len() * mem::size_of::<T>()
+        );
+
+        // FIXME: Unfortunately, `Write::write_all()` expects initialized
+        //        bytes. This transmute is undefined behavior if T contains
+        //        uninitialized padding bytes.
+        //
+        //        To resolve this UB, we'd need either a "freeze" operation
+        //        that turns uninitialized bytes into arbitrary initialized
+        //        bytes, or a `Write` interface that accepts uninit bytes.
+        //
+        //        See this Rust internals forum topic for more discussion:
+        //        https://internals.rust-lang.org/t/writing-down-binary-data-with-padding-bytes/11197/
+        //
+        self.inner.write_all(mem::transmute::<&[MaybeUninit<u8>], &[u8]>(bytes))?;
+
+        // Keep track of the amount of emitted data and exit
         self.written_so_far += mem::size_of_val::<[T]>(data);
         Ok(())
     }
@@ -223,7 +241,6 @@ impl<'bytes> AlignedReader<'bytes> {
 
 #[cfg(test)]
 mod tests {
-    use crate::align::AlignedBytes;
     use super::{AlignedReader, AlignedWriter};
 
     #[test]
@@ -267,8 +284,7 @@ mod tests {
                    "Second 32-bit number was written wrong");
 
         // Prepare to read back the data
-        let mut aligned_bytes = AlignedBytes::<UMax>::new(&mut bytes[..]);
-        let mut reader = AlignedReader::new(&mut aligned_bytes, max_align);
+        let mut reader = AlignedReader::new(&mut bytes, max_align);
 
         // Read back the data
         unsafe {

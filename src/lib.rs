@@ -35,7 +35,7 @@
 //! }
 //! ```
 
-use std::mem::{self, MaybeUninit};
+use std::mem;
 use std::io::Write; // for bytes.write_all; push_all is unstable and extend is slow.
 use std::io::Result as IOResult;
 use std::marker::PhantomData;
@@ -44,6 +44,9 @@ use std::ptr::NonNull;
 
 pub mod abomonated;
 pub mod align;
+
+#[deprecated(note = "Made pub for internal unsafe_abomonate use only")]
+pub use align::{AlignedReader, AlignedWriter};
 
 /// Encodes a typed reference into a binary buffer.
 ///
@@ -80,9 +83,10 @@ pub mod align;
 /// ```
 ///
 #[inline(always)]
-pub unsafe fn encode<T: Entomb, W: Write>(typed: &T, mut write: W) -> IOResult<()> {
-    write_bytes(&mut write, std::slice::from_ref(typed))?;
-    T::entomb(typed, &mut write)
+pub unsafe fn encode<T: Entomb, W: Write>(typed: &T, write: W) -> IOResult<()> {
+    let mut writer = AlignedWriter::new(write, T::alignment());
+    writer.write::<T>(typed)?;
+    T::entomb(typed, &mut writer)
 }
 
 /// Decodes a mutable binary slice into an immutable typed reference.
@@ -94,19 +98,26 @@ pub unsafe fn encode<T: Entomb, W: Write>(typed: &T, mut write: W) -> IOResult<(
 ///
 /// # Safety
 ///
-/// The `decode` method is unsafe due to a number of unchecked invariants.
+/// ## Data validity
 ///
-/// Decoding arbitrary `&[u8]` data can
-/// result in invalid utf8 strings, enums with invalid discriminants, etc. `decode` *does*
-/// perform bounds checks, as part of determining if enough data are present to completely decode,
-/// and while it should only write within the bounds of its `&mut [u8]` argument, the use of invalid
-/// utf8 and enums are undefined behavior.
+/// `decode()` does not check that the input bytes uphold T's validity
+/// invariants. Decoding arbitrary `&[u8]` data can result in invalid
+/// utf8 strings, enums with invalid discriminants, null references, etc. and
+/// some forms of broken invariants are undefined behavior in Rust.
 ///
-/// Please do not decode data that was not encoded by the corresponding implementation.
+/// `decode` *does* perform bounds checks, as part of determining if enough data
+/// are present to completely decode, so it should only read and write within
+/// the bounds of its `&mut [u8]` argument. But that only prevents UB for
+/// truncated data, not arbitrary invalid data.
 ///
-/// In addition, `decode` does not ensure that the bytes representing types will be correctly aligned.
-/// On several platforms unaligned reads are undefined behavior, but on several other platforms they
-/// are only a performance penalty.
+/// Therefore, please do not decode data that was not encoded by the
+/// corresponding encode() implementation.
+///
+/// ## Alignment
+///
+/// `decode()` assumes that the input bytes follow the alignment requirements of
+/// abomonated data of type T, which you can check with `T::alignment()`.
+/// Failure to meet this requirement will result in undefined behavior.
 ///
 /// # Examples
 /// ```
@@ -129,17 +140,9 @@ pub unsafe fn encode<T: Entomb, W: Write>(typed: &T, mut write: W) -> IOResult<(
 pub unsafe fn decode<'bytes, T>(bytes: &'bytes mut [u8]) -> Option<(&'bytes T, &'bytes mut [u8])>
     where T: Exhume<'bytes>
 {
-    if bytes.len() < mem::size_of::<T>() { None }
-    else {
-        let (split1, split2) = bytes.split_at_mut(mem::size_of::<T>());
-        let result: NonNull<T> = mem::transmute(split1.get_unchecked_mut(0));
-        if let Some(remaining) = T::exhume(result, split2) {
-            Some((&*result.as_ptr(), remaining))
-        }
-        else {
-            None
-        }
-    }
+    let mut reader = AlignedReader::new(bytes, T::alignment());
+    let result_ptr = reader.read::<T>()?;
+    Some((T::exhume(result_ptr, &mut reader)?, reader.remaining()))
 }
 
 /// Reports the number of bytes required to encode `self`.
@@ -148,7 +151,9 @@ pub unsafe fn decode<'bytes, T>(bytes: &'bytes mut [u8]) -> Option<(&'bytes T, &
 ///
 /// The `measure` method is safe. It neither produces nor consults serialized representations.
 pub fn measure<T: Entomb>(typed: &T) -> usize {
-    mem::size_of::<T>() + T::extent(&typed)
+    let mut aligned_sink = AlignedWriter::new(std::io::sink(), T::alignment());
+    unsafe { encode(typed, &mut aligned_sink).expect("Sink should be infaillible"); }
+    aligned_sink.written_so_far()
 }
 
 /// Abomonation provides methods to serialize any heap data the implementor owns.
@@ -206,10 +211,7 @@ pub unsafe trait Entomb {
     ///
     /// Most commonly this is owned data on the other end of pointers in `&self`. The return value
     /// reports any failures in writing to `write`.
-    unsafe fn entomb<W: Write>(&self, _write: &mut W) -> IOResult<()> { Ok(()) }
-
-    /// Reports the number of further bytes required to entomb `self`.
-    fn extent(&self) -> usize { 0 }
+    unsafe fn entomb<W: Write>(&self, _write: &mut AlignedWriter<W>) -> IOResult<()> { Ok(()) }
 
     /// Report the alignment of the complete Abomonation-serialized data
     fn alignment() -> usize
@@ -246,7 +248,7 @@ pub unsafe trait Exhume<'de> : Entomb + 'de {
     /// `exhume` using raw pointer operations as much as feasible.
     //
     // FIXME: Replace self_ with self once Rust has arbitrary self types
-    unsafe fn exhume(_self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> { Some(bytes) }
+    unsafe fn exhume(self_: NonNull<Self>, _reader: &mut AlignedReader<'de>) -> Option<&'de mut Self> { Some(&mut *self_.as_ptr()) }
 }
 
 /// The `unsafe_abomonate!` macro takes a type name with an optional list of fields, and implements
@@ -299,15 +301,10 @@ macro_rules! unsafe_abomonate {
     };
     ($t:ty : $($field:ident),*) => {
         unsafe impl $crate::Entomb for $t {
-            unsafe fn entomb<W: ::std::io::Write>(&self, write: &mut W) -> ::std::io::Result<()> {
+            #[allow(deprecated)]
+            unsafe fn entomb<W: ::std::io::Write>(&self, write: &mut $crate::AlignedWriter<W>) -> ::std::io::Result<()> {
                 $( $crate::Entomb::entomb(&self.$field, write)?; )*
                 Ok(())
-            }
-
-            fn extent(&self) -> usize {
-                let mut size = 0;
-                $( size += $crate::Entomb::extent(&self.$field); )*
-                size
             }
 
             #[allow(deprecated)]
@@ -322,14 +319,15 @@ macro_rules! unsafe_abomonate {
         }
 
         unsafe impl<'de> $crate::Exhume<'de> for $t {
-            unsafe fn exhume(self_: ::std::ptr::NonNull<Self>, mut bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
+            #[allow(deprecated)]
+            unsafe fn exhume(self_: ::std::ptr::NonNull<Self>, reader: &mut $crate::AlignedReader<'de>) -> Option<&'de mut Self> {
                 $(
                     // FIXME: This (briefly) constructs an &mut _ to invalid data, which is UB.
                     //        The proposed &raw mut operator would allow avoiding this.
                     let field_ptr: ::std::ptr::NonNull<_> = From::from(&mut (*self_.as_ptr()).$field);
-                    bytes = $crate::Exhume::exhume(field_ptr, bytes)?;
+                    $crate::Exhume::exhume(field_ptr, reader)?;
                 )*
-                Some(bytes)
+                Some(&mut *self_.as_ptr())
             }
         }
     };
@@ -340,18 +338,10 @@ macro_rules! tuple_abomonate {
     ( $($ty:ident)+) => (
         unsafe impl<$($ty: Entomb),*> Entomb for ($($ty,)*) {
             #[allow(non_snake_case)]
-            unsafe fn entomb<WRITE: Write>(&self, write: &mut WRITE) -> IOResult<()> {
+            unsafe fn entomb<WRITE: Write>(&self, write: &mut AlignedWriter<WRITE>) -> IOResult<()> {
                 let ($(ref $ty,)*) = *self;
                 $( $ty::entomb($ty, write)?; )*
                 Ok(())
-            }
-
-            #[allow(non_snake_case)]
-            fn extent(&self) -> usize {
-                let mut size = 0;
-                let ($(ref $ty,)*) = *self;
-                $( size += $ty::extent($ty); )*
-                size
             }
 
             #[allow(non_snake_case)]
@@ -364,16 +354,16 @@ macro_rules! tuple_abomonate {
 
         unsafe impl<'de, $($ty: Exhume<'de>),*> Exhume<'de> for ($($ty,)*) {
             #[allow(non_snake_case)]
-            unsafe fn exhume(self_: NonNull<Self>, mut bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
+            unsafe fn exhume(self_: NonNull<Self>, reader: &mut AlignedReader<'de>) -> Option<&'de mut Self> {
                 // FIXME: This (briefly) constructs a "ref mut" to invalid data, which is UB.
                 //        I think avoiding this would require a cleaner way to iterate over tuple fields.
                 //        One possibility would be a C++11-style combination of variadic generics and recursion.
                 let ($(ref mut $ty,)*) = *self_.as_ptr();
                 $(
                     let field_ptr : NonNull<$ty> = From::from($ty);
-                    bytes = $ty::exhume(field_ptr, bytes)?;
+                    $ty::exhume(field_ptr, reader)?;
                 )*
-                Some(bytes)
+                Some(&mut *self_.as_ptr())
             }
         }
     );
@@ -453,15 +443,11 @@ unsafe impl<T> Entomb for PhantomData<T> { fn alignment() -> usize { mem::align_
 unsafe impl<'de, T: 'de> Exhume<'de> for PhantomData<T> {}
 
 unsafe impl<T: Entomb> Entomb for Option<T> {
-    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+    unsafe fn entomb<W: Write>(&self, write: &mut AlignedWriter<W>) -> IOResult<()> {
         if let &Some(ref inner) = self {
             T::entomb(inner, write)?;
         }
         Ok(())
-    }
-
-    fn extent(&self) -> usize {
-        self.as_ref().map(T::extent).unwrap_or(0)
     }
 
     fn alignment() -> usize {
@@ -469,29 +455,22 @@ unsafe impl<T: Entomb> Entomb for Option<T> {
     }
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Option<T> {
-    unsafe fn exhume(self_: NonNull<Self>, mut bytes: &'de mut[u8]) -> Option<&'de mut [u8]> {
+    unsafe fn exhume(self_: NonNull<Self>, reader: &mut AlignedReader<'de>) -> Option<&'de mut Self> {
         // FIXME: This (briefly) constructs a "ref mut" to invalid data, which is UB.
         //        I'm not sure if this can be fully resolved without relying on enum implementation details.
         if let Some(ref mut inner) = *self_.as_ptr() {
             let inner_ptr : NonNull<T> = From::from(inner);
-            bytes = T::exhume(inner_ptr, bytes)?;
+            T::exhume(inner_ptr, reader)?;
         }
-        Some(bytes)
+        Some(&mut *self_.as_ptr())
     }
 }
 
 unsafe impl<T: Entomb, E: Entomb> Entomb for Result<T, E> {
-    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+    unsafe fn entomb<W: Write>(&self, write: &mut AlignedWriter<W>) -> IOResult<()> {
         match self {
             &Ok(ref inner) => T::entomb(inner, write),
             &Err(ref inner) => E::entomb(inner, write),
-        }
-    }
-
-    fn extent(&self) -> usize {
-        match self {
-            &Ok(ref inner) => T::extent(inner),
-            &Err(ref inner) => E::extent(inner),
         }
     }
 
@@ -500,19 +479,20 @@ unsafe impl<T: Entomb, E: Entomb> Entomb for Result<T, E> {
     }
 }
 unsafe impl<'de, T: Exhume<'de>, E: Exhume<'de>> Exhume<'de> for Result<T, E> {
-    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut[u8]) -> Option<&'de mut [u8]> {
+    unsafe fn exhume(self_: NonNull<Self>, reader: &mut AlignedReader<'de>) -> Option<&'de mut Self> {
         // FIXME: This (briefly) constructs a "ref mut" to invalid data, which is UB.
         //        I'm not sure if this can be fully resolved without relying on enum implementation details.
         match *self_.as_ptr() {
             Ok(ref mut inner) => {
                 let inner_ptr : NonNull<T> = From::from(inner);
-                T::exhume(inner_ptr, bytes)
+                T::exhume(inner_ptr, reader)?;
             }
             Err(ref mut inner) => {
                 let inner_ptr : NonNull<E> = From::from(inner);
-                E::exhume(inner_ptr, bytes)
+                E::exhume(inner_ptr, reader)?;
             }
         }
+        Some(&mut *self_.as_ptr())
     }
 }
 
@@ -550,13 +530,9 @@ tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD
 tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD AE AF);
 
 unsafe impl<T: Entomb> Entomb for [T] {
-    unsafe fn entomb<W: Write>(&self, write: &mut W) ->  IOResult<()> {
+    unsafe fn entomb<W: Write>(&self, write: &mut AlignedWriter<W>) ->  IOResult<()> {
         for element in self { T::entomb(element, write)?; }
         Ok(())
-    }
-
-    fn extent(&self) -> usize {
-        self.iter().map(T::extent).sum()
     }
 
     fn alignment() -> usize {
@@ -564,23 +540,19 @@ unsafe impl<T: Entomb> Entomb for [T] {
     }
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for [T] {
-    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut[u8]) -> Option<&'de mut [u8]> {
+    unsafe fn exhume(self_: NonNull<Self>, reader: &mut AlignedReader<'de>) -> Option<&'de mut Self> {
         // FIXME: This constructs an &[T] to invalid data, which is UB.
         //        I'm not sure if this can be fully resolved without relying on slice implementation details.
         let self_len = self_.as_ref().len();
-        exhume_slice(self_.as_ptr() as *mut T, self_len, bytes)
+        exhume_slice(self_.as_ptr() as *mut T, self_len, reader)
     }
 }
 
 macro_rules! array_abomonate {
     ($size:expr) => (
         unsafe impl<T: Entomb> Entomb for [T; $size] {
-            unsafe fn entomb<W: Write>(&self, write: &mut W) ->  IOResult<()> {
+            unsafe fn entomb<W: Write>(&self, write: &mut AlignedWriter<W>) ->  IOResult<()> {
                 <[T]>::entomb(&self[..], write)
-            }
-
-            fn extent(&self) -> usize {
-                <[T]>::extent(&self[..])
             }
 
             fn alignment() -> usize {
@@ -589,8 +561,9 @@ macro_rules! array_abomonate {
         }
 
         unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for [T; $size] {
-            unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut[u8]) -> Option<&'de mut [u8]> {
-                exhume_slice(self_.as_ptr() as *mut T, $size, bytes)
+            unsafe fn exhume(self_: NonNull<Self>, reader: &mut AlignedReader<'de>) -> Option<&'de mut Self> {
+                exhume_slice(self_.as_ptr() as *mut T, $size, reader)?;
+                Some(&mut *self_.as_ptr())
             }
         }
     )
@@ -631,12 +604,8 @@ array_abomonate!(31);
 array_abomonate!(32);
 
 unsafe impl<'de> Entomb for &'de str {
-    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
-        write.write_all(self.as_bytes())
-    }
-
-    fn extent(&self) -> usize {
-        self.len()
+    unsafe fn entomb<W: Write>(&self, writer: &mut AlignedWriter<W>) -> IOResult<()> {
+        writer.write_slice(self.as_bytes())
     }
 
     fn alignment() -> usize {
@@ -645,23 +614,19 @@ unsafe impl<'de> Entomb for &'de str {
 }
 unsafe impl<'de> Exhume<'de> for &'de str {
     #[inline]
-    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
+    unsafe fn exhume(self_: NonNull<Self>, reader: &mut AlignedReader<'de>) -> Option<&'de mut Self> {
         // FIXME: This (briefly) constructs an &str to invalid data, which is UB.
         //        I'm not sure if this can be fully resolved without relying on &str implementation details.
         let self_len = self_.as_ref().len();
-        let (s, rest) = exhume_str_ref(self_len, bytes)?;
+        let s = exhume_str_ref(self_len, reader)?;
         self_.as_ptr().write(s);
-        Some(rest)
+        Some(&mut *self_.as_ptr())
     }
 }
 
 unsafe impl<'de> Entomb for &'de mut str {
-    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+    unsafe fn entomb<W: Write>(&self, write: &mut AlignedWriter<W>) -> IOResult<()> {
         <&str>::entomb(&self.as_ref(), write)
-    }
-
-    fn extent(&self) -> usize {
-        <&str>::extent(&self.as_ref())
     }
 
     fn alignment() -> usize {
@@ -670,23 +635,19 @@ unsafe impl<'de> Entomb for &'de mut str {
 }
 unsafe impl<'de> Exhume<'de> for &'de mut str {
     #[inline]
-    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
+    unsafe fn exhume(self_: NonNull<Self>, reader: &mut AlignedReader<'de>) -> Option<&'de mut Self> {
         // FIXME: This (briefly) constructs an &mut str to invalid data, which is UB.
         //        I'm not sure if this can be fully resolved without relying on &str implementation details.
         let self_len = self_.as_ref().len();
-        let (s, rest) = exhume_str_ref(self_len, bytes)?;
+        let s = exhume_str_ref(self_len, reader)?;
         self_.as_ptr().write(s);
-        Some(rest)
+        Some(&mut *self_.as_ptr())
     }
 }
 
 unsafe impl Entomb for String {
-    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+    unsafe fn entomb<W: Write>(&self, write: &mut AlignedWriter<W>) -> IOResult<()> {
         <&str>::entomb(&self.as_ref(), write)
-    }
-
-    fn extent(&self) -> usize {
-        <&str>::extent(&self.as_ref())
     }
 
     fn alignment() -> usize {
@@ -695,24 +656,20 @@ unsafe impl Entomb for String {
 }
 unsafe impl<'de> Exhume<'de> for String {
     #[inline]
-    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
+    unsafe fn exhume(self_: NonNull<Self>, reader: &mut AlignedReader<'de>) -> Option<&'de mut Self> {
         // FIXME: This (briefly) constructs an &String to invalid data, which is UB.
         //        I'm not sure if this can be fully resolved without relying on String implementation details.
         let self_len = self_.as_ref().len();
-        let (s, rest) = exhume_str_ref(self_len, bytes)?;
+        let s = exhume_str_ref(self_len, reader)?;
         self_.as_ptr().write(String::from_raw_parts(s.as_mut_ptr(), s.len(), s.len()));
-        Some(rest)
+        Some(&mut *self_.as_ptr())
     }
 }
 
 unsafe impl<'de, T: Entomb + 'de> Entomb for &'de [T] {
-    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
-        write_bytes(write, &self[..])?;
-        <[T]>::entomb(&self[..], write)
-    }
-
-    fn extent(&self) -> usize {
-        mem::size_of::<T>() * self.len() + <[T]>::extent(&self[..])
+    unsafe fn entomb<W: Write>(&self, writer: &mut AlignedWriter<W>) -> IOResult<()> {
+        writer.write_slice::<T>(&self[..])?;
+        <[T]>::entomb(&self[..], writer)
     }
 
     fn alignment() -> usize {
@@ -721,23 +678,19 @@ unsafe impl<'de, T: Entomb + 'de> Entomb for &'de [T] {
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for &'de [T] {
     #[inline]
-    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
+    unsafe fn exhume(self_: NonNull<Self>, bytes: &mut AlignedReader<'de>) -> Option<&'de mut Self> {
         // FIXME: This (briefly) constructs an &[T] to invalid data, which is UB.
         //        I'm not sure if this can be fully resolved without relying on slice implementation details.
         let self_len = self_.as_ref().len();
-        let (s, rest) = exhume_slice_ref(self_len, bytes)?;
+        let s = exhume_slice_ref(self_len, bytes)?;
         self_.as_ptr().write(s);
-        Some(rest)
+        Some(&mut *self_.as_ptr())
     }
 }
 
 unsafe impl<'de, T: Entomb> Entomb for &'de mut [T] {
-    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+    unsafe fn entomb<W: Write>(&self, write: &mut AlignedWriter<W>) -> IOResult<()> {
         <&[T]>::entomb(&&self[..], write)
-    }
-
-    fn extent(&self) -> usize {
-        <&[T]>::extent(&&self[..])
     }
 
     fn alignment() -> usize {
@@ -746,23 +699,19 @@ unsafe impl<'de, T: Entomb> Entomb for &'de mut [T] {
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for &'de mut [T] {
     #[inline]
-    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
+    unsafe fn exhume(self_: NonNull<Self>, bytes: &mut AlignedReader<'de>) -> Option<&'de mut Self> {
         // FIXME: This (briefly) constructs an &mut [T] to invalid data, which is UB.
         //        I'm not sure if this can be fully resolved without relying on slice implementation details.
         let self_len = self_.as_ref().len();
-        let (s, rest) = exhume_slice_ref(self_len, bytes)?;
+        let s = exhume_slice_ref(self_len, bytes)?;
         self_.as_ptr().write(s);
-        Some(rest)
+        Some(&mut *self_.as_ptr())
     }
 }
 
 unsafe impl<T: Entomb> Entomb for Vec<T> {
-    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+    unsafe fn entomb<W: Write>(&self, write: &mut AlignedWriter<W>) -> IOResult<()> {
         <&[T]>::entomb(&&self[..], write)
-    }
-
-    fn extent(&self) -> usize {
-        <&[T]>::extent(&&self[..])
     }
 
     fn alignment() -> usize {
@@ -771,13 +720,13 @@ unsafe impl<T: Entomb> Entomb for Vec<T> {
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Vec<T> {
     #[inline]
-    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
+    unsafe fn exhume(self_: NonNull<Self>, bytes: &mut AlignedReader<'de>) -> Option<&'de mut Self> {
         // FIXME: This (briefly) constructs an &Vec<T> to invalid data, which is UB.
         //        I'm not sure if this can be fully resolved without relying on Vec implementation details.
         let self_len = self_.as_ref().len();
-        let (s, rest) = exhume_slice_ref(self_len, bytes)?;
+        let s = exhume_slice_ref(self_len, bytes)?;
         self_.as_ptr().write(Vec::from_raw_parts(s.as_mut_ptr(), self_len, self_len));
-        Some(rest)
+        Some(&mut *self_.as_ptr())
     }
 }
 
@@ -796,13 +745,9 @@ unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Vec<T> {
 //       into those same bytes.
 //
 unsafe impl<'de, T: Entomb + 'de> Entomb for &'de T {
-    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
-        write_bytes(write, std::slice::from_ref(&**self))?;
-        T::entomb(&**self, write)
-    }
-
-    fn extent(&self) -> usize {
-        mem::size_of::<T>() + T::extent(&**self)
+    unsafe fn entomb<W: Write>(&self, writer: &mut AlignedWriter<W>) -> IOResult<()> {
+        writer.write::<T>(&**self)?;
+        T::entomb(&**self, writer)
     }
 
     fn alignment() -> usize {
@@ -810,20 +755,16 @@ unsafe impl<'de, T: Entomb + 'de> Entomb for &'de T {
     }
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for &'de T {
-    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
-        let (target, rest) = exhume_ref(bytes)?;
+    unsafe fn exhume(self_: NonNull<Self>, reader: &mut AlignedReader<'de>) -> Option<&'de mut Self> {
+        let target = exhume_ref(reader)?;
         self_.as_ptr().write(target);
-        Some(rest)
+        Some(&mut *self_.as_ptr())
     }
 }
 
 unsafe impl<'de, T: Entomb> Entomb for &'de mut T {
-    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+    unsafe fn entomb<W: Write>(&self, write: &mut AlignedWriter<W>) -> IOResult<()> {
         <&T>::entomb(&&**self, write)
-    }
-
-    fn extent(&self) -> usize {
-        <&T>::extent(&&**self)
     }
 
     fn alignment() -> usize {
@@ -831,20 +772,16 @@ unsafe impl<'de, T: Entomb> Entomb for &'de mut T {
     }
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for &'de mut T {
-    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
-        let (target, rest) = exhume_ref(bytes)?;
+    unsafe fn exhume(self_: NonNull<Self>, reader: &mut AlignedReader<'de>) -> Option<&'de mut Self> {
+        let target = exhume_ref(reader)?;
         self_.as_ptr().write(target);
-        Some(rest)
+        Some(&mut *self_.as_ptr())
     }
 }
 
 unsafe impl<T: Entomb> Entomb for Box<T> {
-    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+    unsafe fn entomb<W: Write>(&self, write: &mut AlignedWriter<W>) -> IOResult<()> {
         <&T>::entomb(&self.as_ref(), write)
-    }
-
-    fn extent(&self) -> usize {
-        <&T>::extent(&self.as_ref())
     }
 
     fn alignment() -> usize {
@@ -852,30 +789,11 @@ unsafe impl<T: Entomb> Entomb for Box<T> {
     }
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Box<T> {
-    unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
-        let (target, rest) = exhume_ref(bytes)?;
+    unsafe fn exhume(self_: NonNull<Self>, reader: &mut AlignedReader<'de>) -> Option<&'de mut Self> {
+        let target = exhume_ref(reader)?;
         self_.as_ptr().write(Box::from_raw(target as *mut _));
-        Some(rest)
+        Some(&mut *self_.as_ptr())
     }
-}
-
-// Copy typed data into a writer, currently UB if type T contains padding bytes.
-unsafe fn write_bytes<T>(write: &mut impl Write, slice: &[T]) -> IOResult<()> {
-    // This is the correct way to reinterpret typed data as bytes, it accounts
-    // for the fact that T may contain uninitialized padding bytes.
-    let bytes = std::slice::from_raw_parts(
-        slice.as_ptr() as *const MaybeUninit<u8>,
-        slice.len() * mem::size_of::<T>()
-    );
-
-    // FIXME: Unfortunately, `Write::write_all()` expects initialized bytes.
-    //        This transmute is undefined behavior if T contains padding bytes.
-    //
-    //        To resolve this UB, we'd need either a "freeze" operation that
-    //        turns uninitialized bytes into arbitrary initialized bytes, or an
-    //        extra `Write` interface that accepts uninitialized bytes.
-    //
-    write.write_all(mem::transmute::<&[MaybeUninit<u8>], &[u8]>(bytes))
 }
 
 // Common subset of "exhume" for all [T]-like types
@@ -884,50 +802,35 @@ unsafe fn write_bytes<T>(write: &mut impl Write, slice: &[T]) -> IOResult<()> {
 unsafe fn exhume_slice<'de, T: Exhume<'de>>(
     first_ptr: *mut T,
     length: usize,
-    mut bytes: &'de mut [u8]
-) -> Option<&'de mut [u8]> {
+    reader: &mut AlignedReader<'de>
+) -> Option<&'de mut [T]> {
     for i in 0..length {
         let element_ptr: NonNull<T> = NonNull::new_unchecked(first_ptr.add(i));
-        bytes = T::exhume(element_ptr, bytes)?;
+        T::exhume(element_ptr, reader)?;
     }
-    Some(bytes)
+    Some(std::slice::from_raw_parts_mut(first_ptr, length))
 }
 
 // Common subset of "exhume" for all &[T]-like types
 #[inline]
 unsafe fn exhume_slice_ref<'de, T: Exhume<'de>>(
     length: usize,
-    bytes: &'de mut [u8]
-) -> Option<(&'de mut [T], &'de mut [u8])> {
-    let binary_len = length * mem::size_of::<T>();
-    if binary_len > bytes.len() { None }
-    else {
-        let (mine, mut rest) = bytes.split_at_mut(binary_len);
-        let first_ptr = mine.as_mut_ptr() as *mut T;
-        rest = exhume_slice(first_ptr, length, rest)?;
-        Some((std::slice::from_raw_parts_mut(first_ptr, length).into(), rest))
-    }
+    reader: &mut AlignedReader<'de>
+) -> Option<&'de mut [T]> {
+    let first_ptr = reader.read_slice::<T>(length)?.as_ptr();
+    exhume_slice(first_ptr, length, reader)
 }
 
 // Common subset of "exhume" for all &mut T-like types
-unsafe fn exhume_ref<'de, T: Exhume<'de>>(bytes: &'de mut [u8]) -> Option<(&'de mut T, &'de mut [u8])> {
-    let binary_len = mem::size_of::<T>();
-    if binary_len > bytes.len() { None }
-    else {
-        let (mine, mut rest) = bytes.split_at_mut(binary_len);
-        let target : NonNull<T> = NonNull::new_unchecked(mine.as_mut_ptr() as *mut T);
-        rest = T::exhume(target, rest)?;
-        Some((&mut *target.as_ptr(), rest))
-    }
+unsafe fn exhume_ref<'de, T: Exhume<'de>>(reader: &mut AlignedReader<'de>) -> Option<&'de mut T> {
+    let target = reader.read::<T>()?;
+    T::exhume(target, reader)
 }
 
 // Common subset of "exhume" for all &str-like types
-unsafe fn exhume_str_ref<'de>(length: usize, bytes: &'de mut [u8]) -> Option<(&'de mut str, &'de mut [u8])> {
-    if length > bytes.len() { None }
-    else {
-        let (mine, rest) = bytes.split_at_mut(length);
-        Some((std::str::from_utf8_unchecked_mut(mine), rest))
-    }
+unsafe fn exhume_str_ref<'de>(length: usize, reader: &mut AlignedReader<'de>) -> Option<&'de mut str> {
+    let bytes = exhume_slice_ref::<u8>(length, reader)?;
+    Some(std::str::from_utf8_unchecked_mut(bytes))
 }
 
 mod network {
