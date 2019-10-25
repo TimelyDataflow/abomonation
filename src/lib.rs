@@ -209,6 +209,22 @@ pub unsafe trait Entomb {
 
     /// Reports the number of further bytes required to entomb `self`.
     fn extent(&self) -> usize { 0 }
+
+    /// Report the alignment of the complete Abomonation-serialized data
+    fn alignment() -> usize
+        where Self: Sized; // TODO: { mem::align_of::<Self>() } (once ecosystem is ready)
+
+    /// Version of "alignment" that takes a &self parameter for use in
+    /// declarative macros.
+    ///
+    /// This is _not_ analogous to `mem::align_of_val` and is only intended for
+    /// the internal consumption of the deprecated `unsafe_abomonate` macro.
+    /// Please do not use this trait method in any other code.
+    ///
+    #[deprecated(note="For internal use of unsafe_abomonate only")]
+    fn alignment_from_self_ref(&self) -> usize
+        where Self: Sized
+    { Self::alignment() }
 }
 
 /// Types which can be deserialized from `&'de mut [u8]` to `&'de T` by abomonation
@@ -292,6 +308,16 @@ macro_rules! unsafe_abomonate {
                 $( size += $crate::Entomb::extent(&self.$field); )*
                 size
             }
+
+            #[allow(deprecated)]
+            fn alignment() -> usize {
+                // This is ugly, but I can't think about a better way to do this
+                // in a declarative macro-based code generator...
+                let bad_ref: &Self = unsafe { &*::std::ptr::NonNull::dangling().as_ptr() };
+                let mut align = ::std::mem::align_of::<Self>();
+                $( align = align.max(bad_ref.$field.alignment_from_self_ref()); )*
+                align
+            }
         }
 
         unsafe impl<'de> $crate::Exhume<'de> for $t {
@@ -325,6 +351,13 @@ macro_rules! tuple_abomonate {
                 let ($(ref $ty,)*) = *self;
                 $( size += $ty::extent($ty); )*
                 size
+            }
+
+            #[allow(non_snake_case)]
+            fn alignment() -> usize {
+                let mut align = mem::align_of::<Self>();
+                $( align = align.max($ty::alignment()); )*
+                align
             }
         }
 
@@ -429,6 +462,10 @@ unsafe impl<T: Entomb> Entomb for Option<T> {
     fn extent(&self) -> usize {
         self.as_ref().map(T::extent).unwrap_or(0)
     }
+
+    fn alignment() -> usize {
+        mem::align_of::<Self>().max(T::alignment())
+    }
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Option<T> {
     unsafe fn exhume(self_: NonNull<Self>, mut bytes: &'de mut[u8]) -> Option<&'de mut [u8]> {
@@ -455,6 +492,10 @@ unsafe impl<T: Entomb, E: Entomb> Entomb for Result<T, E> {
             &Ok(ref inner) => T::extent(inner),
             &Err(ref inner) => E::extent(inner),
         }
+    }
+
+    fn alignment() -> usize {
+        mem::align_of::<Self>().max(T::alignment()).max(E::alignment())
     }
 }
 unsafe impl<'de, T: Exhume<'de>, E: Exhume<'de>> Exhume<'de> for Result<T, E> {
@@ -516,6 +557,10 @@ unsafe impl<T: Entomb> Entomb for [T] {
     fn extent(&self) -> usize {
         self.iter().map(T::extent).sum()
     }
+
+    fn alignment() -> usize {
+        <[T; 1]>::alignment()
+    }
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for [T] {
     unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut[u8]) -> Option<&'de mut [u8]> {
@@ -535,6 +580,10 @@ macro_rules! array_abomonate {
 
             fn extent(&self) -> usize {
                 <[T]>::extent(&self[..])
+            }
+
+            fn alignment() -> usize {
+                mem::align_of::<Self>().max(T::alignment())
             }
         }
 
@@ -588,6 +637,10 @@ unsafe impl<'de> Entomb for &'de str {
     fn extent(&self) -> usize {
         self.len()
     }
+
+    fn alignment() -> usize {
+        mem::align_of::<Self>().max(<[u8; 1]>::alignment())
+    }
 }
 unsafe impl<'de> Exhume<'de> for &'de str {
     #[inline]
@@ -608,6 +661,10 @@ unsafe impl<'de> Entomb for &'de mut str {
 
     fn extent(&self) -> usize {
         <&str>::extent(&self.as_ref())
+    }
+
+    fn alignment() -> usize {
+        <&str>::alignment()
     }
 }
 unsafe impl<'de> Exhume<'de> for &'de mut str {
@@ -630,6 +687,10 @@ unsafe impl Entomb for String {
     fn extent(&self) -> usize {
         <&str>::extent(&self.as_ref())
     }
+
+    fn alignment() -> usize {
+        mem::align_of::<Self>().max(<[u8; 1]>::alignment())
+    }
 }
 unsafe impl<'de> Exhume<'de> for String {
     #[inline]
@@ -643,7 +704,7 @@ unsafe impl<'de> Exhume<'de> for String {
     }
 }
 
-unsafe impl<'de, T: Entomb> Entomb for &'de [T] {
+unsafe impl<'de, T: Entomb + 'de> Entomb for &'de [T] {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         write_bytes(write, &self[..])?;
         <[T]>::entomb(&self[..], write)
@@ -651,6 +712,10 @@ unsafe impl<'de, T: Entomb> Entomb for &'de [T] {
 
     fn extent(&self) -> usize {
         mem::size_of::<T>() * self.len() + <[T]>::extent(&self[..])
+    }
+
+    fn alignment() -> usize {
+        mem::align_of::<Self>().max(<[T; 1]>::alignment())
     }
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for &'de [T] {
@@ -673,6 +738,10 @@ unsafe impl<'de, T: Entomb> Entomb for &'de mut [T] {
     fn extent(&self) -> usize {
         <&[T]>::extent(&&self[..])
     }
+
+    fn alignment() -> usize {
+        <&[T]>::alignment()
+    }
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for &'de mut [T] {
     #[inline]
@@ -693,6 +762,10 @@ unsafe impl<T: Entomb> Entomb for Vec<T> {
 
     fn extent(&self) -> usize {
         <&[T]>::extent(&&self[..])
+    }
+
+    fn alignment() -> usize {
+        mem::align_of::<Self>().max(<[T; 1]>::alignment())
     }
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Vec<T> {
@@ -721,7 +794,7 @@ unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Vec<T> {
 //       we start from 'de bytes, and we end up producing references that point
 //       into those same bytes.
 //
-unsafe impl<'de, T: Entomb> Entomb for &'de T {
+unsafe impl<'de, T: Entomb + 'de> Entomb for &'de T {
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         write_bytes(write, std::slice::from_ref(&**self))?;
         T::entomb(&**self, write)
@@ -729,6 +802,10 @@ unsafe impl<'de, T: Entomb> Entomb for &'de T {
 
     fn extent(&self) -> usize {
         mem::size_of::<T>() + T::extent(&**self)
+    }
+
+    fn alignment() -> usize {
+        mem::align_of::<Self>().max(T::alignment())
     }
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for &'de T {
@@ -747,6 +824,10 @@ unsafe impl<'de, T: Entomb> Entomb for &'de mut T {
     fn extent(&self) -> usize {
         <&T>::extent(&&**self)
     }
+
+    fn alignment() -> usize {
+        <&T>::alignment()
+    }
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for &'de mut T {
     unsafe fn exhume(self_: NonNull<Self>, bytes: &'de mut [u8]) -> Option<&'de mut [u8]> {
@@ -763,6 +844,10 @@ unsafe impl<T: Entomb> Entomb for Box<T> {
 
     fn extent(&self) -> usize {
         <&T>::extent(&self.as_ref())
+    }
+
+    fn alignment() -> usize {
+        mem::align_of::<Self>().max(T::alignment())
     }
 }
 unsafe impl<'de, T: Exhume<'de>> Exhume<'de> for Box<T> {
