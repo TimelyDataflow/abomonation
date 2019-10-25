@@ -378,77 +378,77 @@ macro_rules! tuple_abomonate {
     );
 }
 
-unsafe impl Entomb for u8 {}
+unsafe impl Entomb for u8 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for u8 {}
-unsafe impl Entomb for u16 {}
+unsafe impl Entomb for u16 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for u16 {}
-unsafe impl Entomb for u32 {}
+unsafe impl Entomb for u32 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for u32 {}
-unsafe impl Entomb for u64 {}
+unsafe impl Entomb for u64 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for u64 {}
-unsafe impl Entomb for u128 {}
+unsafe impl Entomb for u128 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for u128 {}
-unsafe impl Entomb for usize {}
+unsafe impl Entomb for usize { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for usize {}
 
-unsafe impl Entomb for i8 {}
+unsafe impl Entomb for i8 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for i8 {}
-unsafe impl Entomb for i16 {}
+unsafe impl Entomb for i16 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for i16 {}
-unsafe impl Entomb for i32 {}
+unsafe impl Entomb for i32 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for i32 {}
-unsafe impl Entomb for i64 {}
+unsafe impl Entomb for i64 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for i64 {}
-unsafe impl Entomb for i128 {}
+unsafe impl Entomb for i128 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for i128 {}
-unsafe impl Entomb for isize {}
+unsafe impl Entomb for isize { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for isize {}
 
-unsafe impl Entomb for NonZeroU8 {}
+unsafe impl Entomb for NonZeroU8 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for NonZeroU8 {}
-unsafe impl Entomb for NonZeroU16 {}
+unsafe impl Entomb for NonZeroU16 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for NonZeroU16 {}
-unsafe impl Entomb for NonZeroU32 {}
+unsafe impl Entomb for NonZeroU32 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for NonZeroU32 {}
-unsafe impl Entomb for NonZeroU64 {}
+unsafe impl Entomb for NonZeroU64 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for NonZeroU64 {}
-unsafe impl Entomb for NonZeroU128 {}
+unsafe impl Entomb for NonZeroU128 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for NonZeroU128 {}
-unsafe impl Entomb for NonZeroUsize {}
+unsafe impl Entomb for NonZeroUsize { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for NonZeroUsize {}
 
-unsafe impl Entomb for NonZeroI8 {}
+unsafe impl Entomb for NonZeroI8 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for NonZeroI8 {}
-unsafe impl Entomb for NonZeroI16 {}
+unsafe impl Entomb for NonZeroI16 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for NonZeroI16 {}
-unsafe impl Entomb for NonZeroI32 {}
+unsafe impl Entomb for NonZeroI32 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for NonZeroI32 {}
-unsafe impl Entomb for NonZeroI64 {}
+unsafe impl Entomb for NonZeroI64 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for NonZeroI64 {}
-unsafe impl Entomb for NonZeroI128 {}
+unsafe impl Entomb for NonZeroI128 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for NonZeroI128 {}
-unsafe impl Entomb for NonZeroIsize {}
+unsafe impl Entomb for NonZeroIsize { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for NonZeroIsize {}
 
-unsafe impl Entomb for f32 {}
+unsafe impl Entomb for f32 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for f32 {}
-unsafe impl Entomb for f64 {}
+unsafe impl Entomb for f64 { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for f64 {}
 
-unsafe impl Entomb for bool {}
+unsafe impl Entomb for bool { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for bool {}
-unsafe impl Entomb for () {}
+unsafe impl Entomb for () { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for () {}
 
-unsafe impl Entomb for char {}
+unsafe impl Entomb for char { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for char {}
-unsafe impl Entomb for str {}
+unsafe impl Entomb for str { fn alignment() -> usize { mem::align_of::<[u8; 1]>() } }
 unsafe impl Exhume<'_> for str {}
 
-unsafe impl Entomb for ::std::time::Duration {}
+unsafe impl Entomb for ::std::time::Duration { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl Exhume<'_> for ::std::time::Duration {}
 
-unsafe impl<T> Entomb for PhantomData<T> {}
+unsafe impl<T> Entomb for PhantomData<T> { fn alignment() -> usize { mem::align_of::<Self>() } }
 unsafe impl<'de, T: 'de> Exhume<'de> for PhantomData<T> {}
 
 unsafe impl<T: Entomb> Entomb for Option<T> {
@@ -933,17 +933,17 @@ mod network {
     use super::{Entomb, Exhume};
     use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, IpAddr, Ipv4Addr, Ipv6Addr};
 
-    unsafe impl Entomb for IpAddr {}
+    unsafe impl Entomb for IpAddr { fn alignment() -> usize { std::mem::align_of::<Self>() } }
     unsafe impl Exhume<'_> for IpAddr {}
-    unsafe impl Entomb for Ipv4Addr {}
+    unsafe impl Entomb for Ipv4Addr { fn alignment() -> usize { std::mem::align_of::<Self>() } }
     unsafe impl Exhume<'_> for Ipv4Addr {}
-    unsafe impl Entomb for Ipv6Addr {}
+    unsafe impl Entomb for Ipv6Addr { fn alignment() -> usize { std::mem::align_of::<Self>() } }
     unsafe impl Exhume<'_> for Ipv6Addr {}
 
-    unsafe impl Entomb for SocketAddr {}
+    unsafe impl Entomb for SocketAddr { fn alignment() -> usize { std::mem::align_of::<Self>() } }
     unsafe impl Exhume<'_> for SocketAddr {}
-    unsafe impl Entomb for SocketAddrV4 {}
+    unsafe impl Entomb for SocketAddrV4 { fn alignment() -> usize { std::mem::align_of::<Self>() } }
     unsafe impl Exhume<'_> for SocketAddrV4 {}
-    unsafe impl Entomb for SocketAddrV6 {}
+    unsafe impl Entomb for SocketAddrV6 { fn alignment() -> usize { std::mem::align_of::<Self>() } }
     unsafe impl Exhume<'_> for SocketAddrV6 {}
 }
