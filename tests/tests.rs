@@ -1,6 +1,7 @@
 extern crate abomonation;
 
 use abomonation::*;
+use abomonation::align::AlignedBytes;
 use std::fmt::Debug;
 
 // Test struct for the unsafe_abomonate macro
@@ -135,10 +136,20 @@ fn test_multiple_encode_decode() {
     unsafe { encode(&vec![1,2,3], &mut bytes).unwrap(); }
     unsafe { encode(&"grawwwwrr".to_owned(), &mut bytes).unwrap(); }
 
-    let (t, r) = unsafe { decode::<u32>(&mut bytes) }.unwrap(); assert_eq!(*t, 0);
-    let (t, r) = unsafe { decode::<u64>(r) }.unwrap(); assert_eq!(*t, 7);
-    let (t, r) = unsafe { decode::<Vec<i32>>(r) }.unwrap(); assert_eq!(*t, vec![1,2,3]);
-    let (t, _r) = unsafe { decode::<String>(r) }.unwrap(); assert_eq!(*t, "grawwwwrr".to_owned());
+    let (t, r) = unsafe { decode::<u32>(&mut bytes) }.unwrap();
+    assert_eq!(*t, 0);
+
+    let mut r = AlignedBytes::<u64>::new(r);
+    let (t, r) = unsafe { decode::<u64>(&mut r) }.unwrap();
+    assert_eq!(*t, 7);
+
+    let mut r = AlignedBytes::<Vec<i32>>::new(r);
+    let (t, r) = unsafe { decode::<Vec<i32>>(&mut r) }.unwrap();
+    assert_eq!(*t, vec![1,2,3]);
+
+    let mut r = AlignedBytes::<String>::new(r);
+    let (t, _r) = unsafe { decode::<String>(&mut r) }.unwrap();
+    assert_eq!(*t, "grawwwwrr".to_owned());
 }
 
 #[test]

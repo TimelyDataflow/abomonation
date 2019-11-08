@@ -119,6 +119,10 @@ pub unsafe fn encode<T: Entomb, W: Write>(typed: &T, write: W) -> IOResult<()> {
 /// abomonated data of type T, which you can check with `T::alignment()`.
 /// Failure to meet this requirement will result in undefined behavior.
 ///
+/// If you are not able to guarantee sufficient alignment from your data source, you may find the
+/// `align::AlignedBytes<T>` utility useful. It checks if your data is well-aligned, and moves it
+/// into a well-aligned heap allocation otherwise.
+///
 /// # Examples
 /// ```
 /// use abomonation::{encode, decode};
