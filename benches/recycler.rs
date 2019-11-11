@@ -27,8 +27,9 @@ use test::Bencher;
 // TODO : this reveals that working with a `vec![(); 1 << 40]` does not get optimized away.
 // #[bench] fn vec_u_vn_s_rec(bencher: &mut Bencher) { _bench_rec(bencher, vec![vec![(0u64, vec![(); 1 << 40], format!("grawwwwrr!")); 32]; 32]); }
 
-fn _bench_own<T: Abomonation+Clone>(bencher: &mut Bencher, record: T) {
-
+fn _bench_own<T>(bencher: &mut Bencher, record: T)
+    where for<'de> T: Abomonation<'de> + Clone
+{
     // prepare encoded data
     let mut bytes = Vec::new();
     unsafe { encode(&record, &mut bytes).unwrap(); }
@@ -42,8 +43,9 @@ fn _bench_own<T: Abomonation+Clone>(bencher: &mut Bencher, record: T) {
 }
 
 
-fn _bench_rec<T: Abomonation+Recyclable>(bencher: &mut Bencher, record: T) {
-
+fn _bench_rec<T>(bencher: &mut Bencher, record: T)
+    where for<'de> T: Abomonation<'de> + Recyclable
+{
     // prepare encoded data
     let mut bytes = Vec::new();
     unsafe { encode(&record, &mut bytes).unwrap(); }
