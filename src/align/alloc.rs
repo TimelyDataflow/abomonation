@@ -32,10 +32,24 @@ impl<T: Entomb> Coffin<T> {
     /// May abort the computation if memory is exhausted or the system allocator
     /// is not able to satisfy the size or alignment requirements.
     pub fn new(bytes: &[u8]) -> Self {
-        // Perform the memory allocation using the system allocator. This is
-        // safe because all safety preconditions are checked by Self::layout().
+        // Compute the memory layout of the target memory allocation
         let size = bytes.len();
         let layout = Self::layout(size);
+
+        // Handle zero-sized types just like Box does
+        if layout.size() == 0 {
+            return Self (
+                unsafe { std::slice::from_raw_parts_mut(
+                    NonNull::dangling().as_ptr(),
+                    0,
+                ) }.into(),
+                PhantomData,
+            )
+        }
+
+        // Perform the memory allocation using the system allocator. This is
+        // safe because all safety preconditions are checked by Self::layout(),
+        // except for zero-sized allocations which we checked above.
         let ptr = unsafe { alloc::alloc(layout) };
 
         // Abort on memory allocation errors the recommended way. Since the
@@ -57,8 +71,9 @@ impl<T: Entomb> Coffin<T> {
              PhantomData)
     }
 
-    /// Compute the proper layout for a coffin allocation, checking the safety
-    /// preconditions of the system memory allocator along the way.
+    /// Compute the proper layout for a coffin allocation, checking most safety
+    /// preconditions of the system memory allocator along the way **except for
+    /// the "no zero-sized allocation" requirement**.
     ///
     /// We handle errors via panics because they all emerge from edge cases that
     /// should only be encountered by users actively trying to break this code.
@@ -66,10 +81,6 @@ impl<T: Entomb> Coffin<T> {
         // Basic sanity check for debug builds
         debug_assert!(size >= std::mem::size_of::<T>(),
                       "Requested size is quite obviously not big enough");
-
-        // We're going to use the system allocator, so we cannot accept
-        // zero-sized slices of bytes.
-        assert!(size > 0, "Allocation size must be positive");
 
         // At this point, the only layout errors that remain are those caused by
         // a bad Abomonation::alignment implementation (alignment is zero or not
@@ -119,7 +130,12 @@ impl<T: Entomb> Drop for Coffin<T> {
         //        https://github.com/rust-lang/rust/issues/55005
         let slice = unsafe { self.0.as_mut() };
 
-        // This is safe because...
+        // There is no allocation to deallocate for zero-sized types.
+        if slice.len() == 0 {
+            return;
+        }
+
+        // Deallocate the memory otherwise. This is safe because...
         // - Every Coffin is always created with its own allocation, only Drop
         //   can liberate it, and Drop will only be called once.
         // - Layout is computed in the same way as in `Coffin::new()`, and the
