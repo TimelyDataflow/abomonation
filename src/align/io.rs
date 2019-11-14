@@ -64,8 +64,9 @@ impl<W: Write> AlignedWriter<W> {
         // AlignedReader will skip a number of padding bytes that may not be
         // in sync with the amount that AlignedWriter has inserted, in a manner
         // that depends on how the data being read out was _actually_ aligned.
+        #[cfg(debug_assertions)]
         debug_assert!(
-            if cfg!(debug_assertions) { alignment <= self.output_alignment } else { true },
+            alignment <= self.output_alignment,
             "Insufficient output alignment (output alignment is {}, got data of alignment {})",
             self.output_alignment, alignment
         );
@@ -187,8 +188,9 @@ impl<'bytes> AlignedReader<'bytes> {
         // AlignedReader will skip a number of padding bytes that may not be
         // in sync with the amount that AlignedWriter has inserted, in a manner
         // that depends on how the data being read out was _actually_ aligned.
+        #[cfg(debug_assertions)]
         debug_assert!(
-            if cfg!(debug_assertions) { alignment <= self.input_alignment } else { true },
+            alignment <= self.input_alignment,
             "Insufficient input alignment (input alignment is {}, asked for data of alignment {})",
             self.input_alignment, alignment
         );
