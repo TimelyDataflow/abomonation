@@ -14,3 +14,9 @@ license = "MIT"
 
 [dev-dependencies]
 recycler="0.1.4"
+
+[profile.bench]
+# Multiple codegen units speed up compilation, but make compilation output less
+# deteministic and generally decrease codegen quality through worse inlining.
+# Let's turn it off for benchmarking.
+codegen-units = 1
