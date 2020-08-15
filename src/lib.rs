@@ -307,6 +307,22 @@ impl Abomonation for ::std::time::Duration { }
 
 impl<T> Abomonation for PhantomData<T> {}
 
+impl<T: Abomonation> Abomonation for std::ops::Range<T> {
+    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+        self.start.entomb(write)?;
+        self.end.entomb(write)?;
+        Ok(())
+    }
+    #[inline(always)] unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
+        let tmp = bytes; bytes = self.start.exhume(tmp)?;
+        let tmp = bytes; bytes = self.end.exhume(tmp)?;
+        Some(bytes)
+    }
+    #[inline] fn extent(&self) -> usize {
+        self.start.extent() << 1
+    }
+}
+
 impl<T: Abomonation> Abomonation for Option<T> {
     #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         if let &Some(ref inner) = self {
