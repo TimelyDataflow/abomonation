@@ -40,6 +40,7 @@ use std::io::Write; // for bytes.write_all; push_all is unstable and extend is s
 use std::io::Result as IOResult;
 use std::marker::PhantomData;
 use std::num::*;
+use std::sync::Arc;
 
 pub mod abomonated;
 
@@ -531,6 +532,36 @@ impl<T: Abomonation> Abomonation for Box<T> {
     }
     #[inline] fn extent(&self) -> usize {
         mem::size_of::<T>() + (&**self).extent()
+    }
+}
+
+impl<T: Abomonation + 'static + Sized + Unpin> Abomonation for Arc<T> {
+    #[inline]
+    unsafe fn entomb<W: std::io::Write>(&self, write: &mut W) -> std::io::Result<()> {
+        /* Since the value T has not yet been seen by abomonate (it is behind a pointer)
+         * we need to fully encode it.
+         */
+        encode(self.as_ref(), write)
+    }
+    #[inline]
+    unsafe fn exhume<'a, 'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+        use std::ptr;
+        /* The idea here is to construct a new Arc<T> from the entombed bytes.
+         * The state of this ArcVal upon entry of this function contains only an invalid
+         * pointer to an ArcInner that we need to dispose of without trying to run
+         * its destructor (which would panic).
+         */
+        let (value, bytes) = decode::<T>(bytes)?;
+        // value is just a reference to the first part of old bytes, so move it into a new Arc
+        let arc = Arc::new(ptr::read(value));
+        // now swap the fresh arc into its place ...
+        let garbage = std::mem::replace(self, arc);
+        // ... and forget about the old one
+        mem::forget(garbage);
+        Some(bytes)
+    }
+    fn extent(&self) -> usize {
+        std::mem::size_of::<T>() + self.as_ref().extent()
     }
 }
 
