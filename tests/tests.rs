@@ -136,7 +136,13 @@ fn test_ref_types() {
 
     let mut bytes = Vec::new();
     unsafe { abomonation::encode(&value, &mut bytes).unwrap() };
+    // abomonated bytes end with "hello"
     assert_eq!(&bytes[bytes.len() - 5..], b"hello");
+
+    let mut reference = Vec::new();
+    unsafe { abomonation::encode(&"hello".to_owned(), &mut reference).unwrap() };
+    // abomonating an Arc is like abomonating a pointer and then the contained value
+    assert_eq!(&bytes[std::mem::size_of::<usize>() + 2..], &reference[2..]);
 
     // modify the bytes to see that deserialization uses them and not the pointer
     let pos = bytes.len() - 4;
