@@ -31,7 +31,6 @@ use test::Bencher;
 #[bench] fn vec_u_vn_s_dec(bencher: &mut Bencher) { _bench_dec(bencher, vec![vec![(0u64, vec![(); 1 << 40], format!("grawwwwrr!")); 32]; 32]); }
 
 fn _bench_enc<T: Abomonation>(bencher: &mut Bencher, record: T) {
-
     // prepare encoded data for bencher.bytes
     let mut bytes = Vec::new();
     unsafe { encode(&record, &mut bytes).unwrap(); }
@@ -40,12 +39,11 @@ fn _bench_enc<T: Abomonation>(bencher: &mut Bencher, record: T) {
     bencher.bytes = bytes.len() as u64;
     bencher.iter(|| {
         bytes.clear();
-        unsafe { encode(&record, &mut bytes).unwrap(); }
+        unsafe { encode(&record, &mut bytes).unwrap() }
     });
 }
 
 fn _bench_dec<T: Abomonation+Eq>(bencher: &mut Bencher, record: T) {
-
     // prepare encoded data
     let mut bytes = Vec::new();
     unsafe { encode(&record, &mut bytes).unwrap(); }
