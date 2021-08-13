@@ -1,4 +1,3 @@
-#![cfg_attr(feature = "specialisation", feature(specialization))]
 //! Abomonation (spelling intentional) is a fast serialization / deserialization crate.
 //!
 //! Abomonation takes typed elements and simply writes their contents as binary.
@@ -278,48 +277,45 @@ macro_rules! tuple_abomonate {
     );
 }
 
-#[cfg(not(feature = "specialisation"))]
-mod copy {
-    impl Abomonation for u8 {}
-    impl Abomonation for u16 {}
-    impl Abomonation for u32 {}
-    impl Abomonation for u64 {}
-    impl Abomonation for u128 {}
-    impl Abomonation for usize {}
+impl Abomonation for u8 {}
+impl Abomonation for u16 {}
+impl Abomonation for u32 {}
+impl Abomonation for u64 {}
+impl Abomonation for u128 {}
+impl Abomonation for usize {}
 
-    impl Abomonation for i8 {}
-    impl Abomonation for i16 {}
-    impl Abomonation for i32 {}
-    impl Abomonation for i64 {}
-    impl Abomonation for i128 {}
-    impl Abomonation for isize {}
+impl Abomonation for i8 {}
+impl Abomonation for i16 {}
+impl Abomonation for i32 {}
+impl Abomonation for i64 {}
+impl Abomonation for i128 {}
+impl Abomonation for isize {}
 
-    impl Abomonation for NonZeroU8 {}
-    impl Abomonation for NonZeroU16 {}
-    impl Abomonation for NonZeroU32 {}
-    impl Abomonation for NonZeroU64 {}
-    impl Abomonation for NonZeroU128 {}
-    impl Abomonation for NonZeroUsize {}
+impl Abomonation for NonZeroU8 {}
+impl Abomonation for NonZeroU16 {}
+impl Abomonation for NonZeroU32 {}
+impl Abomonation for NonZeroU64 {}
+impl Abomonation for NonZeroU128 {}
+impl Abomonation for NonZeroUsize {}
 
-    impl Abomonation for NonZeroI8 {}
-    impl Abomonation for NonZeroI16 {}
-    impl Abomonation for NonZeroI32 {}
-    impl Abomonation for NonZeroI64 {}
-    impl Abomonation for NonZeroI128 {}
-    impl Abomonation for NonZeroIsize {}
+impl Abomonation for NonZeroI8 {}
+impl Abomonation for NonZeroI16 {}
+impl Abomonation for NonZeroI32 {}
+impl Abomonation for NonZeroI64 {}
+impl Abomonation for NonZeroI128 {}
+impl Abomonation for NonZeroIsize {}
 
-    impl Abomonation for f32 {}
-    impl Abomonation for f64 {}
+impl Abomonation for f32 {}
+impl Abomonation for f64 {}
 
-    impl Abomonation for bool {}
-    impl Abomonation for () {}
+impl Abomonation for bool {}
+impl Abomonation for () {}
 
-    impl Abomonation for char {}
+impl Abomonation for char {}
 
-    impl Abomonation for ::std::time::Duration {}
+impl Abomonation for ::std::time::Duration {}
 
-    impl<T> Abomonation for PhantomData<T> {}
-}
+impl<T> Abomonation for PhantomData<T> {}
 
 impl<T: Abomonation> Abomonation for std::ops::Range<T> {
     #[inline(always)]
