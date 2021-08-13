@@ -35,10 +35,10 @@
 //! }
 //! ```
 
-use std::mem;       // yup, used pretty much everywhere.
-use std::io::Write; // for bytes.write_all; push_all is unstable and extend is slow.
 use std::io::Result as IOResult;
+use std::io::Write; // for bytes.write_all; push_all is unstable and extend is slow.
 use std::marker::PhantomData;
+use std::mem; // yup, used pretty much everywhere.
 use std::num::*;
 
 pub mod abomonated;
@@ -121,14 +121,14 @@ pub unsafe fn encode<T: Abomonation, W: Write>(typed: &T, write: &mut W) -> IORe
 /// ```
 #[inline]
 pub unsafe fn decode<T: Abomonation>(bytes: &mut [u8]) -> Option<(&T, &mut [u8])> {
-    if bytes.len() < mem::size_of::<T>() { None }
-    else {
+    if bytes.len() < mem::size_of::<T>() {
+        None
+    } else {
         let (split1, split2) = bytes.split_at_mut(mem::size_of::<T>());
         let result: &mut T = mem::transmute(split1.get_unchecked_mut(0));
         if let Some(remaining) = result.exhume(split2) {
             Some((result, remaining))
-        }
-        else {
+        } else {
             None
         }
     }
@@ -158,20 +158,28 @@ pub fn measure<T: Abomonation>(typed: &T) -> usize {
 /// If you are concerned about safety, it may be best to avoid Abomonation all together. It does
 /// several things that may be undefined behavior, depending on how undefined behavior is defined.
 pub trait Abomonation {
-
     /// Write any additional information about `&self` beyond its binary representation.
     ///
     /// Most commonly this is owned data on the other end of pointers in `&self`. The return value
     /// reports any failures in writing to `write`.
-    #[inline(always)] unsafe fn entomb<W: Write>(&self, _write: &mut W) -> IOResult<()> { Ok(()) }
+    #[inline(always)]
+    unsafe fn entomb<W: Write>(&self, _write: &mut W) -> IOResult<()> {
+        Ok(())
+    }
 
     /// Recover any information for `&mut self` not evident from its binary representation.
     ///
     /// Most commonly this populates pointers with valid references into `bytes`.
-    #[inline(always)] unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> { Some(bytes) }
+    #[inline(always)]
+    unsafe fn exhume<'a, 'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+        Some(bytes)
+    }
 
     /// Reports the number of further bytes required to entomb `self`.
-    #[inline(always)] fn extent(&self) -> usize { 0 }
+    #[inline(always)]
+    fn extent(&self) -> usize {
+        0
+    }
 }
 
 /// The `unsafe_abomonate!` macro takes a type name with an optional list of fields, and implements
@@ -216,7 +224,7 @@ pub trait Abomonation {
 /// }
 /// ```
 #[macro_export]
-#[deprecated(since="0.5", note="please use the abomonation_derive crate")]
+#[deprecated(since = "0.5", note = "please use the abomonation_derive crate")]
 macro_rules! unsafe_abomonate {
     ($t:ty) => {
         impl Abomonation for $t { }
@@ -267,95 +275,107 @@ macro_rules! tuple_abomonate {
     );
 }
 
-impl Abomonation for u8 { }
-impl Abomonation for u16 { }
-impl Abomonation for u32 { }
-impl Abomonation for u64 { }
-impl Abomonation for u128 { }
-impl Abomonation for usize { }
+impl Abomonation for u8 {}
+impl Abomonation for u16 {}
+impl Abomonation for u32 {}
+impl Abomonation for u64 {}
+impl Abomonation for u128 {}
+impl Abomonation for usize {}
 
-impl Abomonation for i8 { }
-impl Abomonation for i16 { }
-impl Abomonation for i32 { }
-impl Abomonation for i64 { }
-impl Abomonation for i128 { }
-impl Abomonation for isize { }
+impl Abomonation for i8 {}
+impl Abomonation for i16 {}
+impl Abomonation for i32 {}
+impl Abomonation for i64 {}
+impl Abomonation for i128 {}
+impl Abomonation for isize {}
 
-impl Abomonation for NonZeroU8 { }
-impl Abomonation for NonZeroU16 { }
-impl Abomonation for NonZeroU32 { }
-impl Abomonation for NonZeroU64 { }
-impl Abomonation for NonZeroU128 { }
-impl Abomonation for NonZeroUsize { }
+impl Abomonation for NonZeroU8 {}
+impl Abomonation for NonZeroU16 {}
+impl Abomonation for NonZeroU32 {}
+impl Abomonation for NonZeroU64 {}
+impl Abomonation for NonZeroU128 {}
+impl Abomonation for NonZeroUsize {}
 
-impl Abomonation for NonZeroI8 { }
-impl Abomonation for NonZeroI16 { }
-impl Abomonation for NonZeroI32 { }
-impl Abomonation for NonZeroI64 { }
-impl Abomonation for NonZeroI128 { }
-impl Abomonation for NonZeroIsize { }
+impl Abomonation for NonZeroI8 {}
+impl Abomonation for NonZeroI16 {}
+impl Abomonation for NonZeroI32 {}
+impl Abomonation for NonZeroI64 {}
+impl Abomonation for NonZeroI128 {}
+impl Abomonation for NonZeroIsize {}
 
-impl Abomonation for f32 { }
-impl Abomonation for f64 { }
+impl Abomonation for f32 {}
+impl Abomonation for f64 {}
 
-impl Abomonation for bool { }
-impl Abomonation for () { }
+impl Abomonation for bool {}
+impl Abomonation for () {}
 
-impl Abomonation for char { }
+impl Abomonation for char {}
 
-impl Abomonation for ::std::time::Duration { }
+impl Abomonation for ::std::time::Duration {}
 
 impl<T> Abomonation for PhantomData<T> {}
 
 impl<T: Abomonation> Abomonation for std::ops::Range<T> {
-    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+    #[inline(always)]
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         self.start.entomb(write)?;
         self.end.entomb(write)?;
         Ok(())
     }
-    #[inline(always)] unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
-        let tmp = bytes; bytes = self.start.exhume(tmp)?;
-        let tmp = bytes; bytes = self.end.exhume(tmp)?;
+    #[inline(always)]
+    unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+        let tmp = bytes;
+        bytes = self.start.exhume(tmp)?;
+        let tmp = bytes;
+        bytes = self.end.exhume(tmp)?;
         Some(bytes)
     }
-    #[inline] fn extent(&self) -> usize {
+    #[inline]
+    fn extent(&self) -> usize {
         self.start.extent() << 1
     }
 }
 
 impl<T: Abomonation> Abomonation for Option<T> {
-    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+    #[inline(always)]
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         if let &Some(ref inner) = self {
             inner.entomb(write)?;
         }
         Ok(())
     }
-    #[inline(always)] unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
+    #[inline(always)]
+    unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
         if let &mut Some(ref mut inner) = self {
-            let tmp = bytes; bytes = inner.exhume(tmp)?;
+            let tmp = bytes;
+            bytes = inner.exhume(tmp)?;
         }
         Some(bytes)
     }
-    #[inline] fn extent(&self) -> usize {
+    #[inline]
+    fn extent(&self) -> usize {
         self.as_ref().map(|inner| inner.extent()).unwrap_or(0)
     }
 }
 
 impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
-    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+    #[inline(always)]
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         match self {
             &Ok(ref inner) => inner.entomb(write)?,
             &Err(ref inner) => inner.entomb(write)?,
         };
         Ok(())
     }
-    #[inline(always)] unsafe fn exhume<'a, 'b>(&'a mut self, bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
+    #[inline(always)]
+    unsafe fn exhume<'a, 'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
         match self {
             &mut Ok(ref mut inner) => inner.exhume(bytes),
             &mut Err(ref mut inner) => inner.exhume(bytes),
         }
     }
-    #[inline] fn extent(&self) -> usize {
+    #[inline]
+    fn extent(&self) -> usize {
         match self {
             &Ok(ref inner) => inner.extent(),
             &Err(ref inner) => inner.extent(),
@@ -396,23 +416,29 @@ tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD
 tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD AE);
 tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD AE AF);
 
-
 macro_rules! array_abomonate {
-    ($size:expr) => (
+    ($size:expr) => {
         impl<T: Abomonation> Abomonation for [T; $size] {
             #[inline(always)]
-            unsafe fn entomb<W: Write>(&self, write: &mut W) ->  IOResult<()> {
-                for element in self { element.entomb(write)?; }
+            unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+                for element in self {
+                    element.entomb(write)?;
+                }
                 Ok(())
             }
             #[inline(always)]
-            unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
+            unsafe fn exhume<'a, 'b>(
+                &'a mut self,
+                mut bytes: &'b mut [u8],
+            ) -> Option<&'b mut [u8]> {
                 for element in self {
-                    let tmp = bytes; bytes = element.exhume(tmp)?;
+                    let tmp = bytes;
+                    bytes = element.exhume(tmp)?;
                 }
                 Some(bytes)
             }
-            #[inline(always)] fn extent(&self) -> usize {
+            #[inline(always)]
+            fn extent(&self) -> usize {
                 let mut size = 0;
                 for element in self {
                     size += element.extent();
@@ -420,7 +446,7 @@ macro_rules! array_abomonate {
                 size
             }
         }
-    )
+    };
 }
 
 array_abomonate!(0);
@@ -464,15 +490,20 @@ impl Abomonation for String {
         Ok(())
     }
     #[inline]
-    unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
-        if self.len() > bytes.len() { None }
-        else {
+    unsafe fn exhume<'a, 'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+        if self.len() > bytes.len() {
+            None
+        } else {
             let (mine, rest) = bytes.split_at_mut(self.len());
-            std::ptr::write(self, String::from_raw_parts(mem::transmute(mine.as_ptr()), self.len(), self.len()));
+            std::ptr::write(
+                self,
+                String::from_raw_parts(mem::transmute(mine.as_ptr()), self.len(), self.len()),
+            );
             Some(rest)
         }
     }
-    #[inline] fn extent(&self) -> usize {
+    #[inline]
+    fn extent(&self) -> usize {
         self.len()
     }
 }
@@ -481,21 +512,26 @@ impl<T: Abomonation> Abomonation for Vec<T> {
     #[inline]
     unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         write.write_all(typed_to_bytes(&self[..]))?;
-        for element in self.iter() { element.entomb(write)?; }
+        for element in self.iter() {
+            element.entomb(write)?;
+        }
         Ok(())
     }
     #[inline]
-    unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
-
+    unsafe fn exhume<'a, 'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
         // extract memory from bytes to back our vector
         let binary_len = self.len() * mem::size_of::<T>();
-        if binary_len > bytes.len() { None }
-        else {
+        if binary_len > bytes.len() {
+            None
+        } else {
             let (mine, mut rest) = bytes.split_at_mut(binary_len);
             let slice = std::slice::from_raw_parts_mut(mine.as_mut_ptr() as *mut T, self.len());
-            std::ptr::write(self, Vec::from_raw_parts(slice.as_mut_ptr(), self.len(), self.len()));
+            std::ptr::write(
+                self,
+                Vec::from_raw_parts(slice.as_mut_ptr(), self.len(), self.len()),
+            );
             for element in self.iter_mut() {
-                let temp = rest;             // temp variable explains lifetimes (mysterious!)
+                let temp = rest; // temp variable explains lifetimes (mysterious!)
                 rest = element.exhume(temp)?;
             }
             Some(rest)
@@ -514,40 +550,50 @@ impl<T: Abomonation> Abomonation for Vec<T> {
 impl<T: Abomonation> Abomonation for Box<T> {
     #[inline]
     unsafe fn entomb<W: Write>(&self, bytes: &mut W) -> IOResult<()> {
-        bytes.write_all(std::slice::from_raw_parts(mem::transmute(&**self), mem::size_of::<T>()))?;
+        bytes.write_all(std::slice::from_raw_parts(
+            mem::transmute(&**self),
+            mem::size_of::<T>(),
+        ))?;
         (**self).entomb(bytes)?;
         Ok(())
     }
     #[inline]
-    unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+    unsafe fn exhume<'a, 'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
         let binary_len = mem::size_of::<T>();
-        if binary_len > bytes.len() { None }
-        else {
+        if binary_len > bytes.len() {
+            None
+        } else {
             let (mine, mut rest) = bytes.split_at_mut(binary_len);
             std::ptr::write(self, mem::transmute(mine.as_mut_ptr() as *mut T));
-            let temp = rest; rest = (**self).exhume(temp)?;
+            let temp = rest;
+            rest = (**self).exhume(temp)?;
             Some(rest)
         }
     }
-    #[inline] fn extent(&self) -> usize {
+    #[inline]
+    fn extent(&self) -> usize {
         mem::size_of::<T>() + (&**self).extent()
     }
 }
 
 // This method currently enables undefined behavior, by exposing padding bytes.
-#[inline] unsafe fn typed_to_bytes<T>(slice: &[T]) -> &[u8] {
-    std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len() * mem::size_of::<T>())
+#[inline]
+unsafe fn typed_to_bytes<T>(slice: &[T]) -> &[u8] {
+    std::slice::from_raw_parts(
+        slice.as_ptr() as *const u8,
+        slice.len() * mem::size_of::<T>(),
+    )
 }
 
 mod network {
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
     use Abomonation;
-    use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, IpAddr, Ipv4Addr, Ipv6Addr};
 
-    impl Abomonation for IpAddr { }
-    impl Abomonation for Ipv4Addr { }
-    impl Abomonation for Ipv6Addr { }
+    impl Abomonation for IpAddr {}
+    impl Abomonation for Ipv4Addr {}
+    impl Abomonation for Ipv6Addr {}
 
-    impl Abomonation for SocketAddr { }
-    impl Abomonation for SocketAddrV4 { }
-    impl Abomonation for SocketAddrV6 { }
+    impl Abomonation for SocketAddr {}
+    impl Abomonation for SocketAddrV4 {}
+    impl Abomonation for SocketAddrV6 {}
 }
