@@ -1,9 +1,8 @@
-
-use std::mem::transmute;
 use std::marker::PhantomData;
+use std::mem::transmute;
 use std::ops::{Deref, DerefMut};
 
-use super::{Abomonation, decode};
+use super::{decode, Abomonation};
 
 /// A type wrapping owned decoded abomonated data.
 ///
@@ -49,13 +48,12 @@ use super::{Abomonation, decode};
 ///     panic!("failed to decode");
 /// }
 /// ```
-pub struct Abomonated<T, S: DerefMut<Target=[u8]>> {
+pub struct Abomonated<T, S: DerefMut<Target = [u8]>> {
     phantom: PhantomData<T>,
     decoded: S,
 }
 
-impl<T: Abomonation, S: DerefMut<Target=[u8]>> Abomonated<T, S> {
-
+impl<T: Abomonation, S: DerefMut<Target = [u8]>> Abomonated<T, S> {
     /// Attempts to create decoded data from owned mutable bytes.
     ///
     /// This method will return `None` if it is unable to decode the data with
@@ -94,7 +92,6 @@ impl<T: Abomonation, S: DerefMut<Target=[u8]>> Abomonated<T, S> {
     /// not change if the `bytes: S` instance is moved. Good examples are
     /// `Vec<u8>` whereas bad examples are `[u8; 16]`.
     pub unsafe fn new(mut bytes: S) -> Option<Self> {
-
         // performs the underlying pointer correction, indicates success.
         let decoded = decode::<T>(bytes.deref_mut()).is_some();
 
@@ -103,21 +100,19 @@ impl<T: Abomonation, S: DerefMut<Target=[u8]>> Abomonated<T, S> {
                 phantom: PhantomData,
                 decoded: bytes,
             })
-        }
-        else {
+        } else {
             None
         }
     }
 }
 
-impl<T, S: DerefMut<Target=[u8]>> Abomonated<T, S> {
+impl<T, S: DerefMut<Target = [u8]>> Abomonated<T, S> {
     pub fn as_bytes(&self) -> &[u8] {
         &self.decoded
     }
 }
 
-
-impl<T, S: DerefMut<Target=[u8]>> Deref for Abomonated<T, S> {
+impl<T, S: DerefMut<Target = [u8]>> Deref for Abomonated<T, S> {
     type Target = T;
     #[inline]
     fn deref(&self) -> &T {
