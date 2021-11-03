@@ -1,7 +1,18 @@
+#![cfg_attr(feature = "no_std", no_std)]
 
-use std::mem::transmute;
-use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
+#[cfg(not(feature="no_std"))]
+use {
+    std::mem::transmute,
+    std::marker::PhantomData,
+    std::ops::{Deref, DerefMut},
+};
+
+#[cfg(feature="no_std")]
+use {
+    core::mem::transmute,
+    core::marker::PhantomData,
+    core::ops::{Deref, DerefMut},
+};
 
 use super::{Abomonation, decode};
 

@@ -35,11 +35,46 @@
 //! }
 //! ```
 
-use std::mem;       // yup, used pretty much everywhere.
-use std::io::Write; // for bytes.write_all; push_all is unstable and extend is slow.
-use std::io::Result as IOResult;
-use std::marker::PhantomData;
-use std::num::*;
+#![cfg_attr(feature = "no_std", no_std)]
+
+#[cfg(feature="no_std")]
+extern crate genio;
+
+#[cfg(feature="no_std")]
+extern crate smoltcp;
+
+#[cfg(feature="no_std")]
+extern crate alloc;
+
+#[cfg(not(feature="no_std"))]
+use {
+    std::mem as mem,       // yup, used pretty much everywhere.
+    std::io::{Write, Error}, // for bytes.write_all; push_all is unstable and extend is slow.
+    std::result::Result,
+    std::marker::PhantomData,
+    std::num::*,
+    std::slice as slice,
+    std::time::Duration,
+    std::ops::Range,
+    std::ptr::write as ptr_write,
+};
+
+#[cfg(feature="no_std")]
+use {
+    core::mem as mem,
+    genio::Write,
+    core::result::Result,
+    core::marker::PhantomData,
+    core::num::*,
+    core::slice as slice,
+    core::time::Duration,
+    core::ops::Range,
+    core::ptr::write as ptr_write,
+
+    alloc::vec::Vec,
+    alloc::boxed::Box,
+    alloc::string::String,
+};
 
 pub mod abomonated;
 
@@ -71,8 +106,8 @@ pub mod abomonated;
 /// ```
 ///
 #[inline]
-pub unsafe fn encode<T: Abomonation, W: Write>(typed: &T, write: &mut W) -> IOResult<()> {
-    let slice = std::slice::from_raw_parts(mem::transmute(typed), mem::size_of::<T>());
+pub unsafe fn encode<T: Abomonation, W: Write>(typed: &T, write: &mut W) -> Result<(), Error> {
+    let slice = slice::from_raw_parts(mem::transmute(typed), mem::size_of::<T>());
     write.write_all(slice)?;
     typed.entomb(write)?;
     Ok(())
@@ -163,7 +198,7 @@ pub trait Abomonation {
     ///
     /// Most commonly this is owned data on the other end of pointers in `&self`. The return value
     /// reports any failures in writing to `write`.
-    #[inline(always)] unsafe fn entomb<W: Write>(&self, _write: &mut W) -> IOResult<()> { Ok(()) }
+    #[inline(always)] unsafe fn entomb<W: Write>(&self, _write: &mut W) -> Result<(), Error> { Ok(()) }
 
     /// Recover any information for `&mut self` not evident from its binary representation.
     ///
@@ -223,7 +258,7 @@ macro_rules! unsafe_abomonate {
     };
     ($t:ty : $($field:ident),*) => {
         impl Abomonation for $t {
-            #[inline] unsafe fn entomb<W: ::std::io::Write>(&self, write: &mut W) -> ::std::io::Result<()> {
+            #[inline] unsafe fn entomb<W: Write>(&self, write: &mut W) -> Result<(), Error> {
                 $( self.$field.entomb(write)?; )*
                 Ok(())
             }
@@ -245,7 +280,7 @@ macro_rules! tuple_abomonate {
     ( $($name:ident)+) => (
         impl<$($name: Abomonation),*> Abomonation for ($($name,)*) {
             #[allow(non_snake_case)]
-            #[inline(always)] unsafe fn entomb<WRITE: Write>(&self, write: &mut WRITE) -> IOResult<()> {
+            #[inline(always)] unsafe fn entomb<WRITE: Write>(&self, write: &mut WRITE) -> Result<(), Error> {
                 let ($(ref $name,)*) = *self;
                 $($name.entomb(write)?;)*
                 Ok(())
@@ -303,12 +338,12 @@ impl Abomonation for () { }
 
 impl Abomonation for char { }
 
-impl Abomonation for ::std::time::Duration { }
+impl Abomonation for Duration { }
 
 impl<T> Abomonation for PhantomData<T> {}
 
-impl<T: Abomonation> Abomonation for std::ops::Range<T> {
-    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+impl<T: Abomonation> Abomonation for Range<T> {
+    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> Result<(), Error> {
         self.start.entomb(write)?;
         self.end.entomb(write)?;
         Ok(())
@@ -324,7 +359,7 @@ impl<T: Abomonation> Abomonation for std::ops::Range<T> {
 }
 
 impl<T: Abomonation> Abomonation for Option<T> {
-    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> Result<(), Error> {
         if let &Some(ref inner) = self {
             inner.entomb(write)?;
         }
@@ -342,7 +377,7 @@ impl<T: Abomonation> Abomonation for Option<T> {
 }
 
 impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
-    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> Result<(), Error> {
         match self {
             &Ok(ref inner) => inner.entomb(write)?,
             &Err(ref inner) => inner.entomb(write)?,
@@ -401,7 +436,7 @@ macro_rules! array_abomonate {
     ($size:expr) => (
         impl<T: Abomonation> Abomonation for [T; $size] {
             #[inline(always)]
-            unsafe fn entomb<W: Write>(&self, write: &mut W) ->  IOResult<()> {
+            unsafe fn entomb<W: Write>(&self, write: &mut W) ->  Result<(), Error> {
                 for element in self { element.entomb(write)?; }
                 Ok(())
             }
@@ -459,7 +494,7 @@ array_abomonate!(32);
 
 impl Abomonation for String {
     #[inline]
-    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> Result<(), Error> {
         write.write_all(self.as_bytes())?;
         Ok(())
     }
@@ -468,7 +503,7 @@ impl Abomonation for String {
         if self.len() > bytes.len() { None }
         else {
             let (mine, rest) = bytes.split_at_mut(self.len());
-            std::ptr::write(self, String::from_raw_parts(mem::transmute(mine.as_ptr()), self.len(), self.len()));
+            ptr_write(self, String::from_raw_parts(mem::transmute(mine.as_ptr()), self.len(), self.len()));
             Some(rest)
         }
     }
@@ -479,7 +514,7 @@ impl Abomonation for String {
 
 impl<T: Abomonation> Abomonation for Vec<T> {
     #[inline]
-    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> Result<(), Error> {
         write.write_all(typed_to_bytes(&self[..]))?;
         for element in self.iter() { element.entomb(write)?; }
         Ok(())
@@ -492,8 +527,8 @@ impl<T: Abomonation> Abomonation for Vec<T> {
         if binary_len > bytes.len() { None }
         else {
             let (mine, mut rest) = bytes.split_at_mut(binary_len);
-            let slice = std::slice::from_raw_parts_mut(mine.as_mut_ptr() as *mut T, self.len());
-            std::ptr::write(self, Vec::from_raw_parts(slice.as_mut_ptr(), self.len(), self.len()));
+            let slice = slice::from_raw_parts_mut(mine.as_mut_ptr() as *mut T, self.len());
+            ptr_write(self, Vec::from_raw_parts(slice.as_mut_ptr(), self.len(), self.len()));
             for element in self.iter_mut() {
                 let temp = rest;             // temp variable explains lifetimes (mysterious!)
                 rest = element.exhume(temp)?;
@@ -513,8 +548,8 @@ impl<T: Abomonation> Abomonation for Vec<T> {
 
 impl<T: Abomonation> Abomonation for Box<T> {
     #[inline]
-    unsafe fn entomb<W: Write>(&self, bytes: &mut W) -> IOResult<()> {
-        bytes.write_all(std::slice::from_raw_parts(mem::transmute(&**self), mem::size_of::<T>()))?;
+    unsafe fn entomb<W: Write>(&self, bytes: &mut W) -> Result<(), Error> {
+        bytes.write_all(slice::from_raw_parts(mem::transmute(&**self), mem::size_of::<T>()))?;
         (**self).entomb(bytes)?;
         Ok(())
     }
@@ -524,7 +559,7 @@ impl<T: Abomonation> Abomonation for Box<T> {
         if binary_len > bytes.len() { None }
         else {
             let (mine, mut rest) = bytes.split_at_mut(binary_len);
-            std::ptr::write(self, mem::transmute(mine.as_mut_ptr() as *mut T));
+            ptr_write(self, mem::transmute(mine.as_mut_ptr() as *mut T));
             let temp = rest; rest = (**self).exhume(temp)?;
             Some(rest)
         }
@@ -536,18 +571,28 @@ impl<T: Abomonation> Abomonation for Box<T> {
 
 // This method currently enables undefined behavior, by exposing padding bytes.
 #[inline] unsafe fn typed_to_bytes<T>(slice: &[T]) -> &[u8] {
-    std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len() * mem::size_of::<T>())
+    slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len() * mem::size_of::<T>())
 }
 
 mod network {
     use Abomonation;
+
+    #[cfg(not(feature="no_std"))]
     use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, IpAddr, Ipv4Addr, Ipv6Addr};
+
+    #[cfg(feature="no_std")]
+    use smoltcp::wire::{IpAddress as IpAddr, Ipv4Address as Ipv4Addr, Ipv6Address as Ipv6Addr};
 
     impl Abomonation for IpAddr { }
     impl Abomonation for Ipv4Addr { }
     impl Abomonation for Ipv6Addr { }
 
+    #[cfg(not(feature="no_std"))]
     impl Abomonation for SocketAddr { }
+
+    #[cfg(not(feature="no_std"))]
     impl Abomonation for SocketAddrV4 { }
+
+    #[cfg(not(feature="no_std"))]
     impl Abomonation for SocketAddrV6 { }
 }
