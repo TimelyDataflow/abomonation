@@ -12,5 +12,11 @@ repository = "https://github.com/TimelyDataflow/abomonation.git"
 keywords = ["abomonation"]
 license = "MIT"
 
+[dependencies]
+genio = { version = "0.2.1", optional = true }
+
 [dev-dependencies]
 recycler="0.1.4"
+
+[features]
+no_std = ["genio"]
