@@ -38,7 +38,7 @@
 #![cfg_attr(feature = "no_std", no_std)]
 
 #[cfg(feature="no_std")]
-extern crate genio;
+extern crate bare_io;
 
 #[cfg(feature="no_std")]
 extern crate smoltcp;
@@ -49,8 +49,8 @@ extern crate alloc;
 #[cfg(not(feature="no_std"))]
 use {
     std::mem as mem,       // yup, used pretty much everywhere.
-    std::io::{Write, Error}, // for bytes.write_all; push_all is unstable and extend is slow.
-    std::result::Result,
+    std::io::Write,        // for bytes.write_all; push_all is unstable and extend is slow.
+    std::io::Result as IOResult,
     std::marker::PhantomData,
     std::num::*,
     std::slice as slice,
@@ -62,14 +62,15 @@ use {
 #[cfg(feature="no_std")]
 use {
     core::mem as mem,
-    genio::Write,
-    core::result::Result,
     core::marker::PhantomData,
     core::num::*,
     core::slice as slice,
     core::time::Duration,
     core::ops::Range,
     core::ptr::write as ptr_write,
+
+    bare_io::Write,
+    bare_io::Result as IOResult,
 
     alloc::vec::Vec,
     alloc::boxed::Box,
@@ -106,7 +107,7 @@ pub mod abomonated;
 /// ```
 ///
 #[inline]
-pub unsafe fn encode<T: Abomonation, W: Write>(typed: &T, write: &mut W) -> Result<(), Error> {
+pub unsafe fn encode<T: Abomonation, W: Write>(typed: &T, write: &mut W) -> IOResult<()> {
     let slice = slice::from_raw_parts(mem::transmute(typed), mem::size_of::<T>());
     write.write_all(slice)?;
     typed.entomb(write)?;
@@ -198,7 +199,7 @@ pub trait Abomonation {
     ///
     /// Most commonly this is owned data on the other end of pointers in `&self`. The return value
     /// reports any failures in writing to `write`.
-    #[inline(always)] unsafe fn entomb<W: Write>(&self, _write: &mut W) -> Result<(), Error> { Ok(()) }
+    #[inline(always)] unsafe fn entomb<W: Write>(&self, _write: &mut W) -> IOResult<()> { Ok(()) }
 
     /// Recover any information for `&mut self` not evident from its binary representation.
     ///
@@ -258,7 +259,7 @@ macro_rules! unsafe_abomonate {
     };
     ($t:ty : $($field:ident),*) => {
         impl Abomonation for $t {
-            #[inline] unsafe fn entomb<W: Write>(&self, write: &mut W) -> Result<(), Error> {
+            #[inline] unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
                 $( self.$field.entomb(write)?; )*
                 Ok(())
             }
@@ -280,7 +281,7 @@ macro_rules! tuple_abomonate {
     ( $($name:ident)+) => (
         impl<$($name: Abomonation),*> Abomonation for ($($name,)*) {
             #[allow(non_snake_case)]
-            #[inline(always)] unsafe fn entomb<WRITE: Write>(&self, write: &mut WRITE) -> Result<(), Error> {
+            #[inline(always)] unsafe fn entomb<WRITE: Write>(&self, write: &mut WRITE) -> IOResult<()> {
                 let ($(ref $name,)*) = *self;
                 $($name.entomb(write)?;)*
                 Ok(())
@@ -343,7 +344,7 @@ impl Abomonation for Duration { }
 impl<T> Abomonation for PhantomData<T> {}
 
 impl<T: Abomonation> Abomonation for Range<T> {
-    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> Result<(), Error> {
+    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         self.start.entomb(write)?;
         self.end.entomb(write)?;
         Ok(())
@@ -359,7 +360,7 @@ impl<T: Abomonation> Abomonation for Range<T> {
 }
 
 impl<T: Abomonation> Abomonation for Option<T> {
-    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> Result<(), Error> {
+    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         if let &Some(ref inner) = self {
             inner.entomb(write)?;
         }
@@ -377,7 +378,7 @@ impl<T: Abomonation> Abomonation for Option<T> {
 }
 
 impl<T: Abomonation, E: Abomonation> Abomonation for Result<T, E> {
-    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> Result<(), Error> {
+    #[inline(always)] unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         match self {
             &Ok(ref inner) => inner.entomb(write)?,
             &Err(ref inner) => inner.entomb(write)?,
@@ -436,7 +437,7 @@ macro_rules! array_abomonate {
     ($size:expr) => (
         impl<T: Abomonation> Abomonation for [T; $size] {
             #[inline(always)]
-            unsafe fn entomb<W: Write>(&self, write: &mut W) ->  Result<(), Error> {
+            unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
                 for element in self { element.entomb(write)?; }
                 Ok(())
             }
@@ -494,7 +495,7 @@ array_abomonate!(32);
 
 impl Abomonation for String {
     #[inline]
-    unsafe fn entomb<W: Write>(&self, write: &mut W) -> Result<(), Error> {
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         write.write_all(self.as_bytes())?;
         Ok(())
     }
@@ -514,7 +515,7 @@ impl Abomonation for String {
 
 impl<T: Abomonation> Abomonation for Vec<T> {
     #[inline]
-    unsafe fn entomb<W: Write>(&self, write: &mut W) -> Result<(), Error> {
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
         write.write_all(typed_to_bytes(&self[..]))?;
         for element in self.iter() { element.entomb(write)?; }
         Ok(())
@@ -548,7 +549,7 @@ impl<T: Abomonation> Abomonation for Vec<T> {
 
 impl<T: Abomonation> Abomonation for Box<T> {
     #[inline]
-    unsafe fn entomb<W: Write>(&self, bytes: &mut W) -> Result<(), Error> {
+    unsafe fn entomb<W: Write>(&self, bytes: &mut W) -> IOResult<()> {
         bytes.write_all(slice::from_raw_parts(mem::transmute(&**self), mem::size_of::<T>()))?;
         (**self).entomb(bytes)?;
         Ok(())
