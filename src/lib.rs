@@ -34,19 +34,18 @@
 //!     assert!(remaining.len() == 0);
 //! }
 //! ```
+#![cfg_attr(not(feature="std"), no_std)]
 
-#![cfg_attr(feature = "no_std", no_std)]
-
-#[cfg(feature="no_std")]
+#[cfg(not(feature="std"))]
 extern crate bare_io;
 
-#[cfg(feature="no_std")]
+#[cfg(not(feature="std"))]
 extern crate smoltcp;
 
-#[cfg(feature="no_std")]
+#[cfg(not(feature="std"))]
 extern crate alloc;
 
-#[cfg(not(feature="no_std"))]
+#[cfg(feature="std")]
 use {
     std::mem as mem,       // yup, used pretty much everywhere.
     std::io::Write,        // for bytes.write_all; push_all is unstable and extend is slow.
@@ -59,7 +58,7 @@ use {
     std::ptr::write as ptr_write,
 };
 
-#[cfg(feature="no_std")]
+#[cfg(not(feature="std"))]
 use {
     core::mem as mem,
     core::marker::PhantomData,
@@ -578,22 +577,22 @@ impl<T: Abomonation> Abomonation for Box<T> {
 mod network {
     use Abomonation;
 
-    #[cfg(not(feature="no_std"))]
+    #[cfg(feature="std")]
     use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, IpAddr, Ipv4Addr, Ipv6Addr};
 
-    #[cfg(feature="no_std")]
+    #[cfg(not(feature="std"))]
     use smoltcp::wire::{IpAddress as IpAddr, Ipv4Address as Ipv4Addr, Ipv6Address as Ipv6Addr};
 
     impl Abomonation for IpAddr { }
     impl Abomonation for Ipv4Addr { }
     impl Abomonation for Ipv6Addr { }
 
-    #[cfg(not(feature="no_std"))]
+    #[cfg(feature="std")]
     impl Abomonation for SocketAddr { }
 
-    #[cfg(not(feature="no_std"))]
+    #[cfg(feature="std")]
     impl Abomonation for SocketAddrV4 { }
 
-    #[cfg(not(feature="no_std"))]
+    #[cfg(feature="std")]
     impl Abomonation for SocketAddrV6 { }
 }

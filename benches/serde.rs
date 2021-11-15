@@ -3,19 +3,19 @@
 extern crate abomonation;
 extern crate test;
 
-#[cfg(feature="no_std")]
+#[cfg(not(feature="std"))]
 extern crate bare_io;
 
 use test::Bencher;
 use abomonation::{Abomonation, encode, decode};
 
-#[cfg(not(feature="no_std"))]
+#[cfg(feature="std")]
 use {
 	std::io::Write,
 	std::io::Result as IOResult,
 };
 
-#[cfg(feature="no_std")]
+#[cfg(not(feature="std"))]
 use {
 	bare_io::Write,
 	bare_io::Result as IOResult,
