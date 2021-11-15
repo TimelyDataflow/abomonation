@@ -251,7 +251,6 @@ pub trait Abomonation {
 /// }
 /// ```
 #[macro_export]
-#[deprecated(since="0.5", note="please use the abomonation_derive crate")]
 macro_rules! unsafe_abomonate {
     ($t:ty) => {
         impl Abomonation for $t { }
