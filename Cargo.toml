@@ -12,5 +12,13 @@ repository = "https://github.com/TimelyDataflow/abomonation.git"
 keywords = ["abomonation"]
 license = "MIT"
 
+[dependencies]
+core2 = { version = "0.3", default-features = false, features = [ "alloc" ] }
+smoltcp = { version = "0.7.1", default-features = false, features = [ "alloc", "log", "proto-ipv4", "proto-ipv6", "proto-igmp", "proto-dhcpv4", "socket-raw", "socket-icmp", "socket-udp", "socket-tcp" ] }
+
 [dev-dependencies]
 recycler="0.1.4"
+
+[features]
+default = ["std"]
+std = []

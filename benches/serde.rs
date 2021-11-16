@@ -3,8 +3,23 @@
 extern crate abomonation;
 extern crate test;
 
+#[cfg(not(feature="std"))]
+extern crate core2;
+
 use test::Bencher;
 use abomonation::{Abomonation, encode, decode};
+
+#[cfg(feature="std")]
+use {
+	std::io::Write,
+	std::io::Result as IOResult,
+};
+
+#[cfg(not(feature="std"))]
+use {
+	core2::io::Write,
+	core2::io::Result as IOResult,
+};
 
 #[bench]
 fn bench_populate(b: &mut Bencher) {
