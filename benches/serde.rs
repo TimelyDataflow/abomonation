@@ -4,7 +4,7 @@ extern crate abomonation;
 extern crate test;
 
 #[cfg(not(feature="std"))]
-extern crate bare_io;
+extern crate core2;
 
 use test::Bencher;
 use abomonation::{Abomonation, encode, decode};
@@ -17,8 +17,8 @@ use {
 
 #[cfg(not(feature="std"))]
 use {
-	bare_io::Write,
-	bare_io::Result as IOResult,
+	core2::io::Write,
+	core2::io::Result as IOResult,
 };
 
 #[bench]

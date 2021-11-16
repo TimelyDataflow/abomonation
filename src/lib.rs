@@ -37,7 +37,7 @@
 #![cfg_attr(not(feature="std"), no_std)]
 
 #[cfg(not(feature="std"))]
-extern crate bare_io;
+extern crate core2;
 
 #[cfg(not(feature="std"))]
 extern crate smoltcp;
@@ -68,8 +68,8 @@ use {
     core::ops::Range,
     core::ptr::write as ptr_write,
 
-    bare_io::Write,
-    bare_io::Result as IOResult,
+    core2::io::Write,
+    core2::io::Result as IOResult,
 
     alloc::vec::Vec,
     alloc::boxed::Box,
