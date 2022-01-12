@@ -39,6 +39,7 @@ use std::mem;       // yup, used pretty much everywhere.
 use std::io::Write; // for bytes.write_all; push_all is unstable and extend is slow.
 use std::io::Result as IOResult;
 use std::marker::PhantomData;
+use std::path::PathBuf;
 use std::num::*;
 
 pub mod abomonated;
@@ -474,6 +475,27 @@ impl Abomonation for String {
     }
     #[inline] fn extent(&self) -> usize {
         self.len()
+    }
+}
+
+impl Abomonation for PathBuf {
+    #[inline]
+    unsafe fn entomb<W: Write>(&self, write: &mut W) -> IOResult<()> {
+        write.write_all(std::os::unix::ffi::OsStrExt::as_bytes(self.as_os_str()))?;
+        Ok(())
+    }
+    #[inline]
+    unsafe fn exhume<'a,'b>(&'a mut self, bytes: &'b mut [u8]) -> Option<&'b mut [u8]> {
+        let len = self.as_os_str().len();
+        if len > bytes.len() { None }
+        else {
+            let (mine, rest) = bytes.split_at_mut(len);
+            std::ptr::write(self, PathBuf::from(String::from_raw_parts(mem::transmute(mine.as_ptr()), len, len)));
+            Some(rest)
+        }
+    }
+    #[inline] fn extent(&self) -> usize {
+        self.as_os_str().len()
     }
 }
 
