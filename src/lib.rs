@@ -397,65 +397,27 @@ tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD
 tuple_abomonate!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD AE AF);
 
 
-macro_rules! array_abomonate {
-    ($size:expr) => (
-        impl<T: Abomonation> Abomonation for [T; $size] {
-            #[inline(always)]
-            unsafe fn entomb<W: Write>(&self, write: &mut W) ->  IOResult<()> {
-                for element in self { element.entomb(write)?; }
-                Ok(())
-            }
-            #[inline(always)]
-            unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
-                for element in self {
-                    let tmp = bytes; bytes = element.exhume(tmp)?;
-                }
-                Some(bytes)
-            }
-            #[inline(always)] fn extent(&self) -> usize {
-                let mut size = 0;
-                for element in self {
-                    size += element.extent();
-                }
-                size
-            }
+impl<T: Abomonation, const N: usize> Abomonation for [T; N] {
+    #[inline(always)]
+    unsafe fn entomb<W: Write>(&self, write: &mut W) ->  IOResult<()> {
+        for element in self { element.entomb(write)?; }
+        Ok(())
+    }
+    #[inline(always)]
+    unsafe fn exhume<'a, 'b>(&'a mut self, mut bytes: &'b mut[u8]) -> Option<&'b mut [u8]> {
+        for element in self {
+            let tmp = bytes; bytes = element.exhume(tmp)?;
         }
-    )
+        Some(bytes)
+    }
+    #[inline(always)] fn extent(&self) -> usize {
+        let mut size = 0;
+        for element in self {
+            size += element.extent();
+        }
+        size
+    }
 }
-
-array_abomonate!(0);
-array_abomonate!(1);
-array_abomonate!(2);
-array_abomonate!(3);
-array_abomonate!(4);
-array_abomonate!(5);
-array_abomonate!(6);
-array_abomonate!(7);
-array_abomonate!(8);
-array_abomonate!(9);
-array_abomonate!(10);
-array_abomonate!(11);
-array_abomonate!(12);
-array_abomonate!(13);
-array_abomonate!(14);
-array_abomonate!(15);
-array_abomonate!(16);
-array_abomonate!(17);
-array_abomonate!(18);
-array_abomonate!(19);
-array_abomonate!(20);
-array_abomonate!(21);
-array_abomonate!(22);
-array_abomonate!(23);
-array_abomonate!(24);
-array_abomonate!(25);
-array_abomonate!(26);
-array_abomonate!(27);
-array_abomonate!(28);
-array_abomonate!(29);
-array_abomonate!(30);
-array_abomonate!(31);
-array_abomonate!(32);
 
 impl Abomonation for String {
     #[inline]
