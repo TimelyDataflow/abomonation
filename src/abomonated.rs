@@ -1,5 +1,4 @@
 
-use std::mem::transmute;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
@@ -8,7 +7,7 @@ use super::{Abomonation, decode};
 /// A type wrapping owned decoded abomonated data.
 ///
 /// This type ensures that decoding and pointer correction has already happened,
-/// and implements `Deref<Target=T>` using a pointer cast (transmute).
+/// and implements `Deref<Target=T>` using a pointer cast.
 ///
 /// #Safety
 ///
@@ -121,7 +120,6 @@ impl<T, S: DerefMut<Target=[u8]>> Deref for Abomonated<T, S> {
     type Target = T;
     #[inline]
     fn deref(&self) -> &T {
-        let result: &T = unsafe { transmute(self.decoded.get_unchecked(0)) };
-        result
+        unsafe { &*(self.decoded.as_ptr() as *const T) }
     }
 }
