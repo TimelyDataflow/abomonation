@@ -72,8 +72,7 @@ pub mod abomonated;
 ///
 #[inline]
 pub unsafe fn encode<T: Abomonation, W: Write>(typed: &T, write: &mut W) -> IOResult<()> {
-    let slice = std::slice::from_raw_parts(mem::transmute(typed), mem::size_of::<T>());
-    write.write_all(slice)?;
+    write.write_all(typed_to_bytes(typed))?;
     typed.entomb(write)?;
     Ok(())
 }
@@ -124,7 +123,7 @@ pub unsafe fn decode<T: Abomonation>(bytes: &mut [u8]) -> Option<(&T, &mut [u8])
     if bytes.len() < mem::size_of::<T>() { None }
     else {
         let (split1, split2) = bytes.split_at_mut(mem::size_of::<T>());
-        let result: &mut T = mem::transmute(split1.get_unchecked_mut(0));
+        let result: &mut T = &mut *(split1.as_mut_ptr() as *mut T);
         if let Some(remaining) = result.exhume(split2) {
             Some((result, remaining))
         }
@@ -468,7 +467,7 @@ impl Abomonation for String {
         if self.len() > bytes.len() { None }
         else {
             let (mine, rest) = bytes.split_at_mut(self.len());
-            std::ptr::write(self, String::from_raw_parts(mem::transmute(mine.as_ptr()), self.len(), self.len()));
+            std::ptr::write(self, String::from_raw_parts(mine.as_mut_ptr(), self.len(), self.len()));
             Some(rest)
         }
     }
@@ -514,7 +513,7 @@ impl<T: Abomonation> Abomonation for Vec<T> {
 impl<T: Abomonation> Abomonation for Box<T> {
     #[inline]
     unsafe fn entomb<W: Write>(&self, bytes: &mut W) -> IOResult<()> {
-        bytes.write_all(std::slice::from_raw_parts(mem::transmute(&**self), mem::size_of::<T>()))?;
+        bytes.write_all(typed_to_bytes::<T>(&**self))?;
         (**self).entomb(bytes)?;
         Ok(())
     }
@@ -524,7 +523,7 @@ impl<T: Abomonation> Abomonation for Box<T> {
         if binary_len > bytes.len() { None }
         else {
             let (mine, mut rest) = bytes.split_at_mut(binary_len);
-            std::ptr::write(self, mem::transmute(mine.as_mut_ptr() as *mut T));
+            std::ptr::write(self, Box::from_raw(mine.as_mut_ptr() as *mut T));
             let temp = rest; rest = (**self).exhume(temp)?;
             Some(rest)
         }
@@ -535,8 +534,8 @@ impl<T: Abomonation> Abomonation for Box<T> {
 }
 
 // This method currently enables undefined behavior, by exposing padding bytes.
-#[inline] unsafe fn typed_to_bytes<T>(slice: &[T]) -> &[u8] {
-    std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len() * mem::size_of::<T>())
+#[inline] unsafe fn typed_to_bytes<T: ?Sized>(typed: &T) -> &[u8] {
+    std::slice::from_raw_parts(typed as *const T as *const u8, mem::size_of_val(typed))
 }
 
 mod network {
