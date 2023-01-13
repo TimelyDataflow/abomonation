@@ -12,5 +12,11 @@ repository = "https://github.com/TimelyDataflow/abomonation.git"
 keywords = ["abomonation"]
 license = "MIT"
 
+[features]
+smallvec = ["dep:smallvec"]
+
+[dependencies]
+smallvec = { version = "1.7", optional = true }
+
 [dev-dependencies]
 recycler="0.1.4"

@@ -43,6 +43,12 @@ use std::num::*;
 
 pub mod abomonated;
 
+#[cfg(feature = "smallvec")]
+extern crate smallvec;
+
+#[cfg(feature = "smallvec")]
+mod abomonable_smallvec;
+
 /// Encodes a typed reference into a binary buffer.
 ///
 /// # Safety
